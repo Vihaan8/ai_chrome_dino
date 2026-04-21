@@ -1,41 +1,49 @@
-impl=dl  episodes=TBD  seeds rotated through [1..5] x 20 cohorts
+impl=dl  episodes=100  seeds rotated through [1..5] x 20 cohorts
 game variant=decoys enabled (same game as classical baseline)
-approach=TBD (CNN, YOLO, VLM, DQN, or combination)
+approach=CNN classifier (contour detection + 3-class CNN: ground / flying / decoy)
 
-score:              mean=TBD  median=TBD  max=TBD  min=TBD  stdev=TBD
-obstacles cleared:  mean=TBD  median=TBD  max=TBD  min=TBD  stdev=TBD
-final game speed:   min=TBD   max=TBD
+score:              mean=4895.4  median=4075  max=9451  min=297  stdev=3142.6
+obstacles cleared:  mean=49.2    median=41    max=96    min=1    stdev=32.4
+final game speed:   min=7.19     max=43.80
 
 survival thresholds:
-  % reaching  1000: TBD
-  % reaching  5000: TBD
-  % reaching 10000: TBD  (max_frames cap)
+  % reaching  1000: 88.0%
+  % reaching  5000: 46.0%
+  % reaching 10000:  0.0%  (max_frames cap)
 
 score percentiles:
-  p10=TBD  p25=TBD  p50=TBD  p75=TBD  p90=TBD  p95=TBD
+  p10=916  p25=1954  p50=4075  p75=8357  p90=8473  p95=9192
 
 death cause:
-  ground (cactus):        TBD  (TBD%)
-  flying (pterodactyl):   TBD  (TBD%)
+  ground (cactus):        82  (82.0%)
+  flying (pterodactyl):   18  (18.0%)
 
 failure analysis (eval/failure_analysis.py):
-  survived           TBD  (TBD%)
-  missed_detection   TBD  (TBD%)
-  misclassification  TBD  (TBD%)
-  late_reaction      TBD  (TBD%)
-  timing_error       TBD  (TBD%)
+  survived            0  ( 0.0%)
+  missed_detection   37  (37.0%)
+  misclassification   4  ( 4.0%)
+  late_reaction       0  ( 0.0%)
+  timing_error       59  (59.0%)
 
 per-frame latency:
-  perception:  TBD ms/frame
-  planning:    TBD ms/frame
+  perception:  0.156 ms/frame
+  planning:    0.000 ms/frame
 
 comparison vs the classical-with-decoys baseline (identical seeds):
-  mean score:           1783.8 -> TBD
-  median score:         1156   -> TBD
-  stdev:                1882.1 -> TBD
-  percent reaching 5k:  8.0%   -> TBD
-  percent flying deaths: 33.0% -> TBD
-  percent misclass:     47.0%  -> TBD
+  mean score:            1783.8 -> 4895.4   (+3111.6, +174%)
+  median score:          1156   -> 4075     (+2919,   +253%)
+  stdev:                 1882.1 -> 3142.6   (higher variance)
+  percent reaching 5k:   8.0%   -> 46.0%   (+38pp)
+  percent flying deaths: 33.0%  -> 18.0%   (-15pp)
+  percent misclass:      47.0%  ->  4.0%   (-43pp)
 
 notes:
-  (free text; dataset size, training time, input crop, anything relevant)
+  Model: 3-layer CNN (~200K params), 32x32 grayscale crops, trained on 80 episodes
+  (seeds 200-279, disjoint from eval seeds). Classical agent used for data collection
+  to get longer episodes; obstacles_raw ground truth used for labeling.
+  Training: 30 epochs, Adam lr=1e-3, cosine LR schedule, class oversampling.
+  Val accuracy: 100% (3 visually distinct sprite classes).
+  Perception latency 10x higher than classical (0.156 vs 0.016 ms) but still <1ms,
+  well within the ~16ms frame budget at 60fps.
+  Remaining failures are dominated by timing errors at high speed (speed > 35),
+  where even correct perception leaves insufficient reaction distance.

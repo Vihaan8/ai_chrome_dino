@@ -23,3 +23,7 @@ eval:
   seeds: [1, 2, 3, 4, 5]
   save_runs: true
   max_frames: 10000
+
+dl:
+  model_path: weights/cnn.pt
+  device: cpu
