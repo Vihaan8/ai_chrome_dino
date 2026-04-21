@@ -1,91 +1,118 @@
-# DL Partner Handoff Checklist
+# DL Handoff Checklist (Anvita)
 
-This is the concrete work queue for the DL half of the project. The classical baseline is complete and documented in `README.md`; the contract both versions must obey is in `DL_INTERFACE.md`.
+The DL code lives in this same repository, not a separate one. You own `perception_dl.py` and `planner_dl.py`. Everything under `app/` and `eval/` is shared; edit those only when both of us agree. Git-wise, work on a `dl` branch and rebase onto `main` when you need something we merged.
 
-Numbers to beat (classical, 100 seeded episodes):
+This file is a work queue. Check items off as you go.
+
+
+## Big picture
+
+The classical baseline is done and documented in `README.md`. Your job is to replace perception, or planning, or both, with a learned model and rerun the same evaluation. A DL version that only matches the classical numbers is still a legitimate finding and gets written up honestly. A DL version that beats classical on the hard failure case (late jumps at game speed 36 to 44) is the stronger story.
+
+
+## Numbers to beat
+
+These are the classical 100-episode results. They live in `eval/summary_100.txt` and are reproducible by `python eval/run_eval.py --episodes 100 --impl classical`.
 
 | Metric | Value |
 |---|---|
 | Mean score | 8,241 |
 | Median score | 8,354 |
-| Min / Max | 7,616 / 9,441 |
-| % reaching 5,000 frames | 100.0% |
-| % reaching 10,000 (cap) | 0.0% |
-| Perception latency | 0.015 ms/frame |
-| Planning latency | < 0.001 ms/frame |
-| Failure mode | 100% `timing_error` at game speed 36–44 |
+| Min score | 7,616 |
+| Max score | 9,441 |
+| Percent reaching 5,000 frames | 100.0% |
+| Percent reaching 10,000 frames (the cap) | 0.0% |
+| Perception latency | 0.015 ms per frame |
+| Planning latency | under 0.001 ms per frame |
+| Failure mode | 100 percent timing error on cacti at game speeds 36 to 44 |
 
 
 ## Setup
 
-- [ ] Clone this repo locally and run `python eval/run_eval.py --episodes 10` end-to-end once. Confirm you reproduce the numbers above before touching anything.
-- [ ] Create a parallel repo for the DL version, matching this folder structure: `main.py`, `perception.py`, `planner.py`, `app/game.py`, `app/controller.py`, `app/config.yaml`, `eval/run_eval.py`, `eval/failure_analysis.py`.
-- [ ] Copy `app/game.py` verbatim. The game is shared — don't fork it. If you fix a bug, patch this repo and pull.
-- [ ] Keep `planner.py` unchanged to start (classical planner). Swap only `perception.py` for the first iteration.
+- [ ] Clone this repo (if you haven't already), `pip install -r requirements.txt`.
+- [ ] Create a `dl` branch: `git checkout -b dl`.
+- [ ] Run `python main.py --seed 1 --impl classical` once to confirm the classical agent works on your machine.
+- [ ] Run `python eval/run_eval.py --episodes 10 --impl classical` and confirm you reproduce scores around 7,600 to 8,400.
+- [ ] Run `python main.py --impl dl`. You should see a `NotImplementedError` from `perception_dl.detect`. That is where your work starts.
 
 
 ## Interface
 
-Both functions are imported by `main.py` and `eval/run_eval.py` exactly as in this repo. Signatures are frozen.
+Both of your files must obey the frozen contract in `DL_INTERFACE.md`. Signatures cannot change, otherwise the shared harness breaks.
 
 ```
-perception.detect(frame, cfg) -> {
-    'present': bool,
-    'distance': int or None,   # px from dino right edge (90) to obstacle left edge; can be negative
-    'type': 'ground' or 'flying' or None,
-    'height': int or None,     # top-Y of obstacle in frame coords
-}
+perception_dl.detect(frame, cfg) returns
+  {'present': bool,
+   'distance': int or None,     # pixels from dino right edge (x=90) to obstacle left edge; may be negative
+   'type': 'ground' or 'flying' or None,
+   'height': int or None}       # top-Y of obstacle in frame coordinates
 
-planner.decide(obstacle_info, game_speed, cfg) -> 'none' | 'jump' | 'duck'
+planner_dl.decide(obstacle_info, game_speed, cfg) returns
+  'none' or 'jump' or 'duck'
 ```
 
-- [ ] Your `detect` must accept the same `cfg` dict (parsed from `app/config.yaml`) and respect the `perception.dino_right_edge` key for distance reference.
-- [ ] Your `decide` may be stateful internally, but must not touch `Game` or its attributes.
-- [ ] Any DL-specific parameters (model path, input size, device, batch size) go under a `dl:` section in `config.yaml`. Do not change existing keys.
+- [ ] Your `detect` accepts the same `cfg` dict parsed from `app/config.yaml` and uses `perception.dino_right_edge` for distance reference.
+- [ ] Your `decide` can keep internal state (frame stack, recurrence) but cannot read from the `Game` object directly.
+- [ ] Any DL-specific keys go under a new `dl:` section in `app/config.yaml`. Do not edit existing keys. Example:
+
+```yaml
+dl:
+  model_path: weights/cnn.pt
+  input_size: [84, 84]
+  device: cpu
+```
 
 
 ## Data Collection
 
-The classical agent already produces labeled frames — every JSON log in `eval/runs/` pairs a frame's raw state with a perception output. You can use this as a weak labeler, or sample frames directly.
+The classical agent already produces a labeled dataset in `eval/runs/*.json`. Each JSON log pairs the frame state with what perception saw and what the planner decided, per frame. You can use those logs directly, or replay the same seeds and capture frames as PNGs with your own labels.
 
-- [ ] Export labeled frames: run `python eval/run_eval.py --episodes 20`, then write a small script that reads each run's log, replays the game with the same seed, saves frames as PNGs, and writes a label CSV with `(frame_path, obstacle_type, distance, height, action)`. Target: 2,000–5,000 labeled frames.
-- [ ] Split by seed, not by frame: train seeds, val seeds, test seeds must be disjoint. Use a 70/15/15 split on the seed list.
-- [ ] For VLM approaches, skip labeling entirely and prompt the model with the raw frame.
+- [ ] Decide on your labeling approach: use the classical perception output as a weak label, or hand-label a smaller sample.
+- [ ] Export training frames. Suggested target is 2,000 to 5,000 labeled frames. Too few and you overfit; too many and you are just paying ffor disk space.
+- [ ] Split by seed, not by frame. Train seeds, validation seeds, test seeds must be disjoint so the model cannot memorize a particular run.
+- [ ] For VLM-style approaches (Claude, GPT-4o-mini with frames), skip labeling and prompt the model at inference time instead.
 
 
 ## Suggested Approaches
 
-Pick one for the first pass.
+Pick one for the first iteration.
 
-1. **Small CNN classifier.** Input: 84×84 grayscale crop. Output head: `(type, distance_bucket, height)` or directly `(jump, duck, none)`. Train on the exported frames. Target inference: ≤ 2 ms/frame on CPU.
-2. **YOLOv8n fine-tuned** on cacti + pterodactyl crops. Use the detector to produce `obstacle_info`, keep the classical planner. Nice for the writeup because it's a pretrained model doing something real.
-3. **VLM-in-the-loop.** Prompt Claude or GPT-4o-mini with the frame and a short system prompt; have it return one of `jump`, `duck`, `none` directly. Slow per frame (~200 ms+) but distinct from the classical approach and topical for 2026.
-4. **Pretrained DQN** from an existing Chrome Dino project on GitHub. Adapt the output to our action space.
+1. Small CNN classifier. Input is an 84 by 84 grayscale crop. Output is either `(jump, duck, none)` directly, or a structured `(type, distance_bucket, height)` that feeds into the classical planner. Target inference is under 2 ms per frame on CPU.
+2. YOLOv8n fine-tuned on cacti and pterodactyl crops. Detector produces `obstacle_info`, classical planner reads it. Clean story for the write-up because the detector is a real pretrained model doing object detection.
+3. VLM in the loop. Prompt Claude or GPT-4o-mini with the raw frame and a short system prompt; return one of `jump`, `duck`, `none`. Slow (hundreds of ms per frame) but different enough from classical to be a real contribution.
+4. Pretrained DQN from a public Chrome Dino repository. Adapt the output head to the three-action space we use.
 
 
 ## Eval Parity
 
-The comparison is only meaningful if both versions run under identical conditions.
+Comparison is only meaningful if both versions run under identical conditions.
 
-- [ ] Same seed list in `eval.seeds` in both `config.yaml` files.
-- [ ] Same `eval.episodes`, `eval.max_frames`.
-- [ ] Same `app/game.py` source (same physics, same obstacle distribution).
-- [ ] Run `python eval/run_eval.py --impl dl` in your repo — the `--impl` tag flows into the JSON filenames so we can merge log sets for the writeup.
-- [ ] Report the same metrics: score stats, obstacles_cleared, survival thresholds (1k/5k/cap), death cause, perception and planning ms/frame, failure categorization.
+- [ ] Same seed list in `eval.seeds` (config.yaml does not change).
+- [ ] Same `eval.episodes` and `eval.max_frames`.
+- [ ] Same `app/game.py` source (do not fork the game).
+- [ ] Run `python eval/run_eval.py --episodes 100 --impl dl` from this repo. The `--impl dl` tag lands in the JSON filenames so both sets of runs can live in `eval/runs/` side by side.
+- [ ] Report the same metrics: score stats, obstacles_cleared, survival thresholds (1k, 5k, cap), death cause breakdown, perception and planning ms per frame, and failure categorization from `eval/failure_analysis.py`.
 
 
 ## Deliverables
 
-- [ ] DL repo with a working `python main.py` that plays one episode end-to-end.
-- [ ] `python eval/run_eval.py --episodes 100 --impl dl` producing 100 JSON logs.
-- [ ] A `README.md` in your repo following the same structure as this one (motivation → tree → run → architecture → perception/planner → eval → results → limitations). Don't invent numbers — run the eval and use the real ones.
-- [ ] One combined comparison table (yours vs classical) for the shared writeup / video.
-- [ ] A short section on where your DL version outperforms or underperforms classical and why. If it only matches classical's ~8,241 mean score, that's a legitimate finding — don't inflate it.
+- [ ] Working `python main.py --impl dl` that plays one episode end-to-end.
+- [ ] `python eval/run_eval.py --episodes 100 --impl dl` producing 100 JSON logs in `eval/runs/`.
+- [ ] A short "DL results" section added to `README.md` following the same structure as the classical results section. Use real numbers, not placeholders.
+- [ ] One combined comparison table (classical versus DL) in the README for the final write-up or video.
+- [ ] A short analysis of where the DL version beats or loses to classical and why. If the DL version only matches the classical 8,241 mean score, write that honestly; it is a legitimate result.
 
 
 ## Common Pitfalls
 
-- Rendering is not in the perception pipeline, but `game.get_frame()` does copy the `surfarray`. If inference is already fast, don't waste time optimizing the frame extraction.
-- The dino's own body is inside the perception crop. If a naive detector classifies it as an obstacle, perception will report `present=True` on every frame. The classical version handles this with a fixed-x-band filter; you may need an equivalent in your model (mask the dino region in training data, or provide the dino's x-range as an input feature).
-- Distance can be negative when a pterodactyl is directly above a ducking dino. The classical planner uses this to stay in `duck`. Don't clip distance to ≥ 0 at inference.
-- Game speed is not in the frame. Pass it separately via `cfg` or maintain it in your planner state.
+- Rendering is not in the perception pipeline. `game.get_frame()` does a `surfarray` copy that takes around 10 microseconds. Do not optimize it, optimize your model.
+- The dino's own body is inside the perception crop on purpose, so we can still see obstacles flying over it. A naive detector will label the dino as an obstacle every frame. Either mask the dino region in your training data or pass the dino's known x-range as an extra input channel to the model.
+- Distance can be negative when a pterodactyl is directly above a ducking dino. Classical perception returns those cases so the planner stays in `duck` until the ptero clears. Do not clip distance to >= 0 in your inference code.
+- Game speed is not visible in the frame. Pass it via `cfg` or recover it from consecutive frames in your planner state; do not assume it is constant.
+
+
+## Coordination with Vihaan
+
+- Edits to `app/` or `eval/` need a heads-up. Ping before pushing.
+- If you hit a bug in the classical side (for example perception misbehaving on a new sprite), file it or push a patch to `main` rather than working around it in `perception_dl.py`.
+- If we decide to add randomization to the game (day or night mode, obstacle variants), that is a joint change and we will re-run both baselines together.

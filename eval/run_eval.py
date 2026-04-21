@@ -1,5 +1,6 @@
 import argparse
 import copy
+import importlib
 import json
 import os
 import sys
@@ -13,8 +14,6 @@ sys.path.insert(0, ROOT)
 
 from app.game import Game
 from app import controller
-import perception
-import planner
 
 
 def load_config():
@@ -22,7 +21,15 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def run_one(game, cfg, seed):
+def load_impl(name):
+    if name == 'classical':
+        return importlib.import_module('perception'), importlib.import_module('planner')
+    if name == 'dl':
+        return importlib.import_module('perception_dl'), importlib.import_module('planner_dl')
+    raise ValueError(f'unknown impl: {name}')
+
+
+def run_one(game, cfg, seed, perception, planner):
     game.reset(seed=seed)
     cap = cfg['eval']['max_frames']
     log = []
@@ -74,11 +81,12 @@ def stats(xs):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--episodes', type=int, default=None)
-    ap.add_argument('--impl', default='classical')
+    ap.add_argument('--impl', choices=['classical', 'dl'], default='classical')
     ap.add_argument('--outdir', default=os.path.join(ROOT, 'eval', 'runs'))
     args = ap.parse_args()
 
     cfg = load_config()
+    perception, planner = load_impl(args.impl)
     episodes = args.episodes or cfg['eval']['episodes']
     seeds = cfg['eval']['seeds']
     save = cfg['eval']['save_runs']
@@ -91,7 +99,7 @@ def main():
 
     for i in range(episodes):
         seed = seeds[i % len(seeds)] + (i // len(seeds)) * 1000
-        res = run_one(game, cfg, seed)
+        res = run_one(game, cfg, seed, perception, planner)
         scores.append(res['score'])
         frames.append(res['frames'])
         cleared.append(res['obstacles_cleared'])
