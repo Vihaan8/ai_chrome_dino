@@ -27,6 +27,15 @@ PTERO_H = 20
 PTERO_HIGH_Y = 108
 PTERO_LOW_Y = 135
 
+# Decoys: visually obstacle-like clouds that drift through the play area.
+# They do not collide, but contour-based perception picks them up as obstacles,
+# wasting jumps and occasionally leaving the dino airborne when a real cactus arrives.
+CLOUD_W = 48
+CLOUD_H = 20
+CLOUD_Y = 135          # bottom at 155 so classical classifies it as ground
+SPAWN_CLOUD_MIN = 160
+SPAWN_CLOUD_MAX = 340
+
 BG = (247, 247, 247)
 FG = (83, 83, 83)
 
@@ -95,6 +104,14 @@ PTERO_UP = """
 ......##..
 """.strip('\n')
 
+CLOUD = """
+...######...
+.##########.
+############
+.##########.
+...######...
+""".strip('\n')
+
 PTERO_DOWN = """
 .........#
 .........#
@@ -138,6 +155,7 @@ class Game:
         self.spr_dino_duck = [_sprite(DINO_DUCK_A), _sprite(DINO_DUCK_B)]
         self.spr_cactus = _sprite(CACTUS)
         self.spr_ptero = [_sprite(PTERO_UP), _sprite(PTERO_DOWN)]
+        self.spr_cloud = _sprite(CLOUD)
 
     def reset(self, seed=None):
         self.rng = random.Random(seed)
@@ -148,11 +166,13 @@ class Game:
         self.on_ground = True
         self.obstacles = []
         self.next_spawn = self.rng.randint(SPAWN_MIN_GAP, SPAWN_MAX_GAP)
+        self.next_cloud = self.rng.randint(SPAWN_CLOUD_MIN, SPAWN_CLOUD_MAX)
         self.frame = 0
         self.score = 0
         self.done = False
         self.game_speed = START_SPEED
         self.obstacles_cleared = 0
+        self.decoys_triggered = 0
         self.killer = None
         self._render()
 
@@ -190,18 +210,25 @@ class Game:
             self._spawn()
             self.next_spawn = self.rng.randint(SPAWN_MIN_GAP, SPAWN_MAX_GAP)
 
+        self.next_cloud -= 1
+        if self.next_cloud <= 0:
+            self._spawn_cloud()
+            self.next_cloud = self.rng.randint(SPAWN_CLOUD_MIN, SPAWN_CLOUD_MAX)
+
         for o in self.obstacles:
             o[0] -= self.game_speed
         kept = []
         for o in self.obstacles:
             if o[0] + o[2] > 0:
                 kept.append(o)
-            else:
+            elif o[4] != 'decoy':
                 self.obstacles_cleared += 1
         self.obstacles = kept
 
         dino_rect = (DINO_X, self.dino_y, DINO_W, self.dino_h)
         for o in self.obstacles:
+            if o[4] == 'decoy':
+                continue
             if self._hit(dino_rect, o):
                 self.done = True
                 self.killer = {'type': o[4], 'x': o[0], 'y': o[1],
@@ -229,6 +256,10 @@ class Game:
             self.obstacles.append([float(SCREEN_W), float(PTERO_LOW_Y),
                                    PTERO_W, PTERO_H, 'flying'])
 
+    def _spawn_cloud(self):
+        self.obstacles.append([float(SCREEN_W), float(CLOUD_Y),
+                               CLOUD_W, CLOUD_H, 'decoy'])
+
     def _hit(self, a, b):
         ax, ay, aw, ah = a
         bx, by, bw, bh = b[0], b[1], b[2], b[3]
@@ -243,6 +274,8 @@ class Game:
     def _obstacle_sprite(self, o):
         if o[4] == 'ground':
             return self.spr_cactus
+        if o[4] == 'decoy':
+            return self.spr_cloud
         anim = (self.frame // 8) % 2
         return self.spr_ptero[anim]
 

@@ -1,0 +1,41 @@
+impl=dl  episodes=TBD  seeds rotated through [1..5] x 20 cohorts
+game variant=decoys enabled (same game as classical baseline)
+approach=TBD (CNN, YOLO, VLM, DQN, or combination)
+
+score:              mean=TBD  median=TBD  max=TBD  min=TBD  stdev=TBD
+obstacles cleared:  mean=TBD  median=TBD  max=TBD  min=TBD  stdev=TBD
+final game speed:   min=TBD   max=TBD
+
+survival thresholds:
+  % reaching  1000: TBD
+  % reaching  5000: TBD
+  % reaching 10000: TBD  (max_frames cap)
+
+score percentiles:
+  p10=TBD  p25=TBD  p50=TBD  p75=TBD  p90=TBD  p95=TBD
+
+death cause:
+  ground (cactus):        TBD  (TBD%)
+  flying (pterodactyl):   TBD  (TBD%)
+
+failure analysis (eval/failure_analysis.py):
+  survived           TBD  (TBD%)
+  missed_detection   TBD  (TBD%)
+  misclassification  TBD  (TBD%)
+  late_reaction      TBD  (TBD%)
+  timing_error       TBD  (TBD%)
+
+per-frame latency:
+  perception:  TBD ms/frame
+  planning:    TBD ms/frame
+
+comparison vs the classical-with-decoys baseline (identical seeds):
+  mean score:           1783.8 -> TBD
+  median score:         1156   -> TBD
+  stdev:                1882.1 -> TBD
+  percent reaching 5k:  8.0%   -> TBD
+  percent flying deaths: 33.0% -> TBD
+  percent misclass:     47.0%  -> TBD
+
+notes:
+  (free text; dataset size, training time, input crop, anything relevant)

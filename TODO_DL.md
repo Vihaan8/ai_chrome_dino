@@ -12,19 +12,26 @@ The classical baseline is done and documented in `README.md`. Your job is to rep
 
 ## Numbers to beat
 
-These are the classical 100-episode results. They live in `eval/summary_100.txt` and are reproducible by `python eval/run_eval.py --episodes 100 --impl classical`.
+Classical 100-episode results with decoys enabled (the current default game mode). Full breakdown in `eval/summary_100.txt`; reproducible by `python eval/run_eval.py --episodes 100 --impl classical`.
 
 | Metric | Value |
 |---|---|
-| Mean score | 8,241 |
-| Median score | 8,354 |
-| Min score | 7,616 |
-| Max score | 9,441 |
-| Percent reaching 5,000 frames | 100.0% |
+| Mean score | 1,784 |
+| Median score | 1,156 |
+| Min score | 281 |
+| Max score | 8,637 |
+| Stdev | 1,882 |
+| Percent reaching 1,000 frames | 54.0% |
+| Percent reaching 5,000 frames | 8.0% |
 | Percent reaching 10,000 frames (the cap) | 0.0% |
-| Perception latency | 0.015 ms per frame |
+| Perception latency | 0.016 ms per frame |
 | Planning latency | under 0.001 ms per frame |
-| Failure mode | 100 percent timing error on cacti at game speeds 36 to 44 |
+| Ground (cactus) deaths | 67% |
+| Flying (pterodactyl) deaths | 33% |
+| Misclassification failures | 47% (clouds tagged as cacti) |
+| Timing-error failures | 53% (acted on real obstacle but hit anyway) |
+
+The cloud decoys drive classical's collapse: it jumps on every cloud, wastes 35 airborne frames, and gets hit by whatever real obstacle comes next. A DL perception module trained to distinguish clouds from cacti should recover most of the pre-decoy ceiling (mean score around 8,200) without reintroducing the cactus failures at speed. That is the headroom you are aiming for.
 
 
 ## Setup
@@ -32,7 +39,7 @@ These are the classical 100-episode results. They live in `eval/summary_100.txt`
 - [ ] Clone this repo (if you haven't already), `pip install -r requirements.txt`.
 - [ ] Create a `dl` branch: `git checkout -b dl`.
 - [ ] Run `python main.py --seed 1 --impl classical` once to confirm the classical agent works on your machine.
-- [ ] Run `python eval/run_eval.py --episodes 10 --impl classical` and confirm you reproduce scores around 7,600 to 8,400.
+- [ ] Run `python eval/run_eval.py --episodes 10 --impl classical` and confirm you reproduce highly variable scores (mean around 1,800, range 300 to 8,600). The variance is the point; decoys make classical erratic.
 - [ ] Run `python main.py --impl dl`. You should see a `NotImplementedError` from `perception_dl.detect`. That is where your work starts.
 
 
@@ -65,10 +72,11 @@ dl:
 
 ## Data Collection
 
-The classical agent already produces a labeled dataset in `eval/runs/*.json`. Each JSON log pairs the frame state with what perception saw and what the planner decided, per frame. You can use those logs directly, or replay the same seeds and capture frames as PNGs with your own labels.
+The classical agent's JSON logs in `eval/runs/` include both what perception saw (`obstacle`) and what the game actually had (`obstacles_raw`, with real types including `'decoy'`). Use the `obstacles_raw` list as ground truth; the `obstacle` field is classical perception's output and is wrong for clouds. This distinction is the whole point of the DL contribution.
 
-- [ ] Decide on your labeling approach: use the classical perception output as a weak label, or hand-label a smaller sample.
-- [ ] Export training frames. Suggested target is 2,000 to 5,000 labeled frames. Too few and you overfit; too many and you are just paying ffor disk space.
+- [ ] Decide on your labeling approach: use `obstacles_raw` as ground truth, or hand-label a smaller sample.
+- [ ] When labeling, map `'decoy'` to "not an obstacle" (or a separate class "decoy" depending on your output head design). The point is that your model must learn to ignore clouds even though they look like cacti to a contour detector.
+- [ ] Export training frames. Suggested target is 2,000 to 5,000 labeled frames. Too few and you overfit; too many is just disk cost.
 - [ ] Split by seed, not by frame. Train seeds, validation seeds, test seeds must be disjoint so the model cannot memorize a particular run.
 - [ ] For VLM-style approaches (Claude, GPT-4o-mini with frames), skip labeling and prompt the model at inference time instead.
 
@@ -98,9 +106,23 @@ Comparison is only meaningful if both versions run under identical conditions.
 
 - [ ] Working `python main.py --impl dl` that plays one episode end-to-end.
 - [ ] `python eval/run_eval.py --episodes 100 --impl dl` producing 100 JSON logs in `eval/runs/`.
-- [ ] A short "DL results" section added to `README.md` following the same structure as the classical results section. Use real numbers, not placeholders.
-- [ ] One combined comparison table (classical versus DL) in the README for the final write-up or video.
-- [ ] A short analysis of where the DL version beats or loses to classical and why. If the DL version only matches the classical 8,241 mean score, write that honestly; it is a legitimate result.
+- [ ] `eval/summary_100_dl.txt` filled in with your real numbers. The file already exists with the right template; replace every `TBD`.
+- [ ] `README.md` DL Results section filled in. All tables exist with `TBD` placeholders under the `## DL Results` heading. Drop in your numbers.
+- [ ] `README.md` Classical vs DL Comparison section filled in. The comparison table already has classical's numbers in the first column; fill the DL column and the delta column.
+- [ ] Short analysis (two paragraphs at most) at the bottom of the Comparison section describing where DL beat or lost to classical and why. If DL only matches classical on mean score, write that honestly; it is a legitimate result.
+
+
+## Where your numbers need to land
+
+When you finish the 100-episode run, three files get touched:
+
+| File | What to update |
+|---|---|
+| `eval/summary_100_dl.txt` | Replace every `TBD` with real numbers. This is the auditable source of truth, same format as classical's summary. |
+| `README.md` under `## DL Results` | The score, cleared, percentile, threshold, death-cause, failure-analysis, and latency tables all have TBD rows. Fill them. Also note which pipeline modules are learned under "Which parts of the pipeline are learned". |
+| `README.md` under `## Classical vs DL Comparison` | The comparison table has classical's numbers in the first column; fill the DL column and the delta column. Then write the short analysis. |
+
+Both implementations' JSON logs (`run_classical_*.json` and `run_dl_*.json`) live in `eval/runs/` side by side. `failure_analysis.py` reads both impls and reports combined counts; split by impl yourself if you want per-impl breakdowns for the write-up.
 
 
 ## Common Pitfalls

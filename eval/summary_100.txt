@@ -1,33 +1,37 @@
-impl=classical  episodes=100  seeds rotated through [1..5] × 20 cohorts
+impl=classical  episodes=100  seeds rotated through [1..5] x 20 cohorts
+game variant=decoys enabled (cloud decoys spawn at cactus-like Y with no collision)
 
-score:              mean=8241.5  median=8354  max=9441  min=7616  stdev=454.6
-obstacles cleared:  mean=83.6    median=84    max=98    min=72    stdev=5.4
-final game speed:   mean=38.97   max=43.76    min=36.46
+score:              mean=1783.8  median=1156  max=8637  min=281  stdev=1882.1
+obstacles cleared:  mean=17.0    median=10    max=88    min=1    stdev=19.9
+final game speed:   min=7.12   max=40.54   (range compressed by early deaths)
 
 survival thresholds:
-  % reaching  1000: 100.0%
-  % reaching  5000: 100.0%
+  % reaching  1000:  54.0%
+  % reaching  5000:   8.0%
   % reaching 10000:   0.0%  (max_frames cap)
 
 score percentiles:
-  p10=7631  p25=7654  p50=8354  p75=8425  p90=8494  p95=9259
-
-death-speed cohorts:
-  speed 36-37:  29 runs  (29.0%)  score ~7616-7659
-  speed 39-40:  63 runs  (63.0%)  score ~8320-8495
-  speed 42-44:   8 runs  ( 8.0%)  score ~9146-9441
+  p10=348  p25=548  p50=1156  p75=2309  p90=4761  p95=6621
 
 death cause:
-  ground (cactus):  100  (100.0%)
-  flying:             0  (  0.0%)
+  ground (cactus):        67  ( 67.0%)
+  flying (pterodactyl):   33  ( 33.0%)
 
 failure analysis (eval/failure_analysis.py):
   survived           0  (  0.0%)
   missed_detection   0  (  0.0%)
-  misclassification  0  (  0.0%)
+  misclassification 47  ( 47.0%)  clouds tagged as cacti by contour-plus-position rules
   late_reaction      0  (  0.0%)
-  timing_error     100  (100.0%)
+  timing_error      53  ( 53.0%)  jumped or ducked but hit anyway
 
 per-frame latency:
-  perception:  0.015 ms/frame
+  perception:  0.016 ms/frame
   planning:    0.000 ms/frame
+
+comparison vs the pre-decoy baseline (identical seeds, no clouds):
+  mean score:           8241.5 -> 1783.8    (drop of 6458)
+  median score:         8354   -> 1156      (drop of 7198)
+  stdev:                454.6  -> 1882.1    (4.1x more erratic)
+  percent reaching 5k:  100.0% -> 8.0%
+  percent flying deaths: 0.0%  -> 33.0%
+  percent misclass:      0.0%  -> 47.0%

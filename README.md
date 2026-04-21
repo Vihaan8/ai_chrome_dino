@@ -2,9 +2,9 @@
 
 Can a hand-tuned classical pipeline play Chrome Dino at high speeds, and where does it break down before a learned pipeline takes over?
 
-Chrome Dino is a reactive obstacle-avoidance game where a running character jumps over cacti and ducks under pterodactyls while the game speed keeps increasing. Classical computer vision (fixed thresholds, contour detection, and rule-based control) is fast and interpretable but sensitive to hand-picked decision boundaries. We build two versions of the agent in one repository that share a game engine and an evaluation harness: a classical perception plus planner (Vihaan), and a learned DL perception or planner (Anvita). Both versions plug into the same Pygame clone through frozen function signatures and are compared on the same seed list.
+Chrome Dino is a reactive obstacle-avoidance game where a running character jumps over cacti and ducks under pterodactyls while the game speed keeps increasing. Classical computer vision (fixed thresholds, contour detection, and rule-based control) is fast and interpretable but sensitive to hand-picked decision boundaries. We build two versions of the agent in one repository that share a game engine and an evaluation harness: a classical perception plus planner (Vihaan), and a learned DL perception or planner (Anvita). The game also spawns cloud-shaped decoys that classical perception cannot distinguish from real obstacles, so wasted jumps create compounding failures at high speed. Both versions plug into the same Pygame clone through frozen function signatures and are compared on the same seed list.
 
-On 100 seeded episodes, the classical agent survives every run past frame 5,000 with a mean score of 8,241 (median 8,354, stdev 455). Perception takes 15 microseconds per frame; planning is effectively free. All 100 deaths are timing errors on cacti at game speeds 36 to 44, the point where the linear reaction-distance formula cannot keep up with how far the obstacle moves between frames. The DL version is the comparison point: if a learned agent can handle the speed-scaling problem without per-threshold tuning, that is the contribution.
+On 100 seeded episodes with decoys enabled, the classical agent scores a mean of 1,784 (median 1,156, stdev 1,882). Only 8 percent of runs reach 5,000 frames; 67 percent of deaths are cacti and 33 percent are pterodactyls catching the dino while it is mid-recovery from a cloud-induced jump. 47 percent of failures categorize as misclassification (clouds tagged as cacti), 53 percent as timing errors. Perception still runs in 16 microseconds per frame, but speed is no longer the bottleneck. The DL version is the comparison point: if a learned perception module can learn to ignore clouds from labeled data, its score should stay near the clean-game classical ceiling of about 8,200 while our classical agent collapses to 1,784.
 
 
 ## Big picture
@@ -106,6 +106,8 @@ flowchart LR
 
 Obstacles spawn at 55 to 140 frame intervals, move leftward at the current game speed, and are removed when they go off-screen. Sprites are pixel-art silhouettes composed from ASCII grids at 4x scale. The dino has a two-frame running animation, the pterodactyl flaps its wings, and the ducking pose is a flattened version of the running dino.
 
+The game also spawns cloud-shaped decoys on their own timer (every 160 to 340 frames). Clouds are drawn as dark silhouettes at a cactus-like Y position, so a classical contour detector classifies them as ground obstacles. They pass through the dino with no collision. This is the visual complication the DL version is designed to handle: the clouds and the real cacti are visually similar but only one of them matters for collision, and classical perception has no way to tell them apart from silhouette alone.
+
 | Parameter | Value | Purpose |
 |---|---|---|
 | `screen_w`, `screen_h` | 600, 200 | frame size |
@@ -114,10 +116,12 @@ Obstacles spawn at 55 to 140 frame intervals, move leftward at the current game 
 | `dino_h_stand`, `dino_h_duck` | 40, 20 | standing vs ducking height |
 | `gravity`, `jump_v` | 0.8, -14.0 | vertical physics |
 | `start_speed`, `speed_inc` | 6.0, 0.004 | initial and per-frame speed increase |
-| `spawn_min_gap`, `spawn_max_gap` | 55, 140 | frames between obstacle spawns |
+| `spawn_min_gap`, `spawn_max_gap` | 55, 140 | frames between real-obstacle spawns |
 | `cactus_w`, `cactus_h` | 20, 40 | ground obstacle size |
 | `ptero_w`, `ptero_h` | 40, 20 | flying obstacle size |
 | `ptero_high_y`, `ptero_low_y` | 108, 135 | must-duck and must-jump spawn heights |
+| `cloud_w`, `cloud_h`, `cloud_y` | 48, 20, 135 | decoy size and spawn Y (bottom at 155, classical reads as ground) |
+| `spawn_cloud_min`, `spawn_cloud_max` | 160, 340 | frames between decoy spawns (roughly one cloud per two real obstacles) |
 
 
 ## Perception
@@ -190,70 +194,68 @@ Determinism comes from three places: the game uses a seeded `random.Random`, the
 Each episode writes a JSON log to `eval/runs/run_<impl>_<seed>_<i>.json`. Logs include frame-by-frame action, obstacle info, dino state, and the raw obstacle list so later analysis does not need to rerun the game. `failure_analysis.py` reads every log in `eval/runs/` and classifies each death into one of five buckets: `survived`, `missed_detection`, `misclassification`, `late_reaction`, `timing_error`.
 
 
-## Results
+## Classical Results
 
-Scores cluster by the game speed the agent was playing at when it died. Every run hits the agent's timing limit eventually, and the seed determines how many obstacles happen to arrive before that limit is reached. Perception is never the failure; the planner's reaction distance is.
+Scores are highly variable with decoys turned on. Classical perception cannot tell a cloud from a cactus, so the agent jumps on clouds; jumps commit the dino to 35 airborne frames, and if a real obstacle arrives during that window the dino lands on it. Earlier runs that would have hit the speed-36 cliff now die much earlier because cloud-induced jumps bring the crash point forward.
 
 ### Score and survival
 
 | Metric | Mean | Median | Min | Max | Stdev |
 |---|---|---|---|---|---|
-| Score (frames survived) | 8,241.5 | 8,354 | 7,616 | 9,441 | 454.6 |
-| Obstacles cleared | 83.6 | 84 | 72 | 98 | 5.4 |
-| Final game speed | 38.97 | n/a | 36.46 | 43.76 | n/a |
+| Score (frames survived) | 1,783.8 | 1,156 | 281 | 8,637 | 1,882.1 |
+| Obstacles cleared | 17.0 | 10 | 1 | 88 | 19.9 |
+| Final game speed | n/a | n/a | 7.12 | 40.54 | n/a |
 
 | Score percentile | p10 | p25 | p50 | p75 | p90 | p95 |
 |---|---|---|---|---|---|---|
-| Value | 7,631 | 7,654 | 8,354 | 8,425 | 8,494 | 9,259 |
+| Value | 348 | 548 | 1,156 | 2,309 | 4,761 | 6,621 |
 
 | Threshold | Percent of runs reaching it |
 |---|---|
-| 1,000 frames | 100.0% |
-| 5,000 frames | 100.0% |
+| 1,000 frames | 54.0% |
+| 5,000 frames | 8.0% |
 | 10,000 frames (the cap) | 0.0% |
 
 ### Death cause
 
-Every single death is a cactus. Pterodactyls are detected and avoided reliably at every speed the agent plays at. This is useful for the DL comparison: if a DL perception module gets any pterodactyl death, it has to justify why a more expensive model lost ground on the easier case.
+Deaths are no longer a single failure mode. A third of them are now pterodactyls, which happens when the agent is recovering from a cloud-induced jump and a real ptero arrives before the dino can act again. This is a regression from the pre-decoy version where 100 percent of deaths were cacti and pterodactyls were handled perfectly.
 
 | Type | Count | Fraction |
 |---|---|---|
-| Ground (cactus) | 100 | 100.0% |
-| Flying (pterodactyl) | 0 | 0.0% |
+| Ground (cactus) | 67 | 67.0% |
+| Flying (pterodactyl) | 33 | 33.0% |
 
 ### Failure analysis
+
+The failure analysis now shows two roughly equal failure modes. `misclassification` catches frames where classical perception reports a type that differs from what the game internally tagged, which is exactly what clouds cause (perception says ground, game says decoy). `timing_error` catches frames where the agent acted on a real obstacle but still collided, usually because a previous cloud-induced jump had not yet fully resolved.
 
 | Category | Count | Fraction |
 |---|---|---|
 | survived | 0 | 0.0% |
 | missed_detection | 0 | 0.0% |
-| misclassification | 0 | 0.0% |
+| misclassification | 47 | 47.0% |
 | late_reaction | 0 | 0.0% |
-| timing_error | 100 | 100.0% |
+| timing_error | 53 | 53.0% |
 
 ### Per-frame latency
 
 | Stage | Time |
 |---|---|
-| Perception | 0.015 ms per frame (about 15 microseconds) |
+| Perception | 0.016 ms per frame (about 16 microseconds) |
 | Planning | under 0.001 ms per frame |
 
 
-## Why the agent plateaus
+## Why the classical agent plateaus
 
-The failure mode is simple to state. The planner tells the dino to jump when the obstacle is at most `70 + 2.0 * game_speed` pixels away. At game speed 36.5, that threshold is 143 pixels. But each frame the obstacle moves 36.5 pixels closer. So the observed distance steps from about 145 (no jump) to about 109 (jump) in one frame, and by the time the jump takes effect the obstacle is too close to clear.
+The failure mode has two flavors now, and the second is the interesting one.
 
-This shows up as three speed cliffs in the data. Seeds that get a cactus right at the first cliff die at score around 7,620. Seeds that slip past it die at the next cliff at score around 8,350. A small fraction make it past even that and die around 9,200.
+The first flavor is the same as before decoys: at high game speeds the linear reaction distance (`70 + 2.0 * game_speed`) stops being large enough given how far an obstacle moves per frame. Raising `planner.speed_factor` from 2.0 to something like 4.0 or 6.0 fixes it. We still keep the value tight on purpose so the eval shows real, categorizable failures.
 
-| Death-speed cohort | Runs | Typical score |
-|---|---|---|
-| 36 to 37 | 29 | 7,616 to 7,659 |
-| 39 to 40 | 63 | 8,320 to 8,495 |
-| 42 to 44 | 8 | 9,146 to 9,441 |
+The second flavor is the decoy response. Classical perception finds any dark blob above a certain size in the crop region and classifies it by position: contour bottom at or below Y=154 is a ground obstacle, anything higher is flying. Cloud decoys are drawn at Y=135 with height 20, putting their bottom at Y=155. From classical's perspective they are indistinguishable from cacti. The planner jumps. The jump commits the dino to 35 airborne frames. If a real obstacle arrives during that window, the dino has no way to react, and collision happens either in the air (flying obstacle) or at the moment of landing (ground obstacle). This is why 33 percent of deaths are now pterodactyls and why the median score collapsed from 8,354 to 1,156.
 
-The fix is a config change, not a code change: raising `planner.speed_factor` from 2.0 to something like 4.0 or 6.0 pushes the jump threshold past the per-frame displacement at those speeds. We keep the value tight on purpose so the eval shows a real, categorizable failure instead of a flat 100% cap-reach that would hide the pipeline's behavior.
+Classical can patch this with another rule. For example, size-filter: clouds are 48 pixels wide, cacti are 20 pixels wide; treat wide dark blobs as decoys. That works until we change the cloud sprite, or add a new obstacle type, or let the clouds overlap with cacti in the frame. Every patch adds another brittle threshold.
 
-This is the point of comparison for the DL version. A learned agent that handles the speed-scaling problem without this hand-picked knob is a real contribution. A DL agent that only matches the classical mean score of 8,241 on the same seeds is a legitimate finding too; it means the classical rules captured what this game rewards.
+This is the point of comparison for the DL version. A learned perception module trained on frames where clouds are labeled as non-obstacles should be able to ignore them without a separate rule. If the DL mean score stays near the pre-decoy classical ceiling of about 8,200 while our classical agent collapses to 1,784, the delta is the real contribution of learning.
 
 
 ## DL Handoff
@@ -274,6 +276,91 @@ Any DL-specific configuration (model path, input size, device) goes under a new 
 The concrete checklist, suggested approaches, and eval parity requirements are in `TODO_DL.md`.
 
 
+## DL Results
+
+Pending. Anvita runs `python eval/run_eval.py --episodes 100 --impl dl` once `perception_dl.py` is implemented. The tables below are the slots she fills in, using the same seeds and the same `max_frames` cap as the classical eval.
+
+### DL score and survival
+
+| Metric | Mean | Median | Min | Max | Stdev |
+|---|---|---|---|---|---|
+| Score (frames survived) | TBD | TBD | TBD | TBD | TBD |
+| Obstacles cleared | TBD | TBD | TBD | TBD | TBD |
+| Final game speed | TBD | n/a | TBD | TBD | n/a |
+
+| Score percentile | p10 | p25 | p50 | p75 | p90 | p95 |
+|---|---|---|---|---|---|---|
+| Value | TBD | TBD | TBD | TBD | TBD | TBD |
+
+| Threshold | Percent of runs reaching it |
+|---|---|
+| 1,000 frames | TBD |
+| 5,000 frames | TBD |
+| 10,000 frames (the cap) | TBD |
+
+### DL death cause
+
+| Type | Count | Fraction |
+|---|---|---|
+| Ground (cactus) | TBD | TBD |
+| Flying (pterodactyl) | TBD | TBD |
+
+### DL failure analysis
+
+| Category | Count | Fraction |
+|---|---|---|
+| survived | TBD | TBD |
+| missed_detection | TBD | TBD |
+| misclassification | TBD | TBD |
+| late_reaction | TBD | TBD |
+| timing_error | TBD | TBD |
+
+### DL per-frame latency
+
+| Stage | Time |
+|---|---|
+| Perception | TBD ms per frame |
+| Planning | TBD ms per frame |
+
+### Which parts of the pipeline are learned
+
+| Module | Implementation |
+|---|---|
+| Perception | TBD (CNN, YOLO, VLM, or unchanged from classical) |
+| Planner | TBD (learned policy or unchanged from classical) |
+| Config keys added under `dl:` | TBD |
+
+
+## Classical vs DL Comparison
+
+Pending. Populated after the DL run lands. Same seeds, same max_frames, same game.
+
+| Metric | Classical | DL | Delta |
+|---|---|---|---|
+| Mean score | 1,784 | TBD | TBD |
+| Median score | 1,156 | TBD | TBD |
+| Stdev | 1,882 | TBD | TBD |
+| Percent reaching 1,000 | 54.0% | TBD | TBD |
+| Percent reaching 5,000 | 8.0% | TBD | TBD |
+| Percent reaching cap | 0.0% | TBD | TBD |
+| Ground deaths | 67.0% | TBD | TBD |
+| Flying deaths | 33.0% | TBD | TBD |
+| Misclassification failures | 47.0% | TBD | TBD |
+| Timing-error failures | 53.0% | TBD | TBD |
+| Perception latency | 0.016 ms | TBD | TBD |
+| Planning latency | under 0.001 ms | TBD | TBD |
+
+### Short analysis
+
+Pending. Two paragraphs at most:
+
+First paragraph. Where did DL beat classical and why. If the answer is "learned perception ignored clouds, score recovered toward the pre-decoy ceiling," say so concretely with numbers.
+
+Second paragraph. Where did DL lose to classical and why. Common reasons: slower inference eating into reaction time; model trained on too few frames; specific failure modes the model did not see during training.
+
+A DL result that only matches classical is still a legitimate finding. Write it honestly.
+
+
 ## Team
 
 Vihaan Manchanda (classical), Anvita Suresh (DL)
@@ -286,4 +373,5 @@ IDS 705, Duke University
 - Project specification: `CLAUDE.md` at repository root.
 - DL interface contract: `DL_INTERFACE.md`.
 - DL handoff checklist: `TODO_DL.md`.
-- Latest classical eval summary: `eval/summary_100.txt`.
+- Classical eval summary: `eval/summary_100.txt`.
+- DL eval summary (pending): `eval/summary_100_dl.txt`.
