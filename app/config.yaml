@@ -1,0 +1,25 @@
+perception:
+  crop_x_start: 50
+  crop_x_end: 500
+  crop_y_start: 80
+  crop_y_end: 160
+  threshold: 150
+  min_contour_area: 50
+  ground_line_y: 160
+  ground_tolerance: 6
+  dino_right_edge: 90
+  # filter out the dino's own contour: skip ground-touching contours whose
+  # x range falls entirely inside this band
+  dino_mask_x_start: 45
+  dino_mask_x_end: 95
+
+planner:
+  base_reaction_distance: 70
+  speed_factor: 2.0
+  duck_height_threshold: 125
+
+eval:
+  episodes: 50
+  seeds: [1, 2, 3, 4, 5]
+  save_runs: true
+  max_frames: 10000

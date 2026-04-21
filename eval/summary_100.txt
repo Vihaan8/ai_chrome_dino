@@ -1,0 +1,33 @@
+impl=classical  episodes=100  seeds rotated through [1..5] × 20 cohorts
+
+score:              mean=8241.5  median=8354  max=9441  min=7616  stdev=454.6
+obstacles cleared:  mean=83.6    median=84    max=98    min=72    stdev=5.4
+final game speed:   mean=38.97   max=43.76    min=36.46
+
+survival thresholds:
+  % reaching  1000: 100.0%
+  % reaching  5000: 100.0%
+  % reaching 10000:   0.0%  (max_frames cap)
+
+score percentiles:
+  p10=7631  p25=7654  p50=8354  p75=8425  p90=8494  p95=9259
+
+death-speed cohorts:
+  speed 36-37:  29 runs  (29.0%)  score ~7616-7659
+  speed 39-40:  63 runs  (63.0%)  score ~8320-8495
+  speed 42-44:   8 runs  ( 8.0%)  score ~9146-9441
+
+death cause:
+  ground (cactus):  100  (100.0%)
+  flying:             0  (  0.0%)
+
+failure analysis (eval/failure_analysis.py):
+  survived           0  (  0.0%)
+  missed_detection   0  (  0.0%)
+  misclassification  0  (  0.0%)
+  late_reaction      0  (  0.0%)
+  timing_error     100  (100.0%)
+
+per-frame latency:
+  perception:  0.015 ms/frame
+  planning:    0.000 ms/frame

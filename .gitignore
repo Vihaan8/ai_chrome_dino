@@ -1,0 +1,5 @@
+eval/runs/
+__pycache__/
+*.pyc
+.DS_Store
+.claude
