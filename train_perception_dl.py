@@ -32,9 +32,7 @@ PAD = 8
 LABEL_MAP = {"decoy": 0, "ground": 1, "flying": 2}
 
 
-# ---------------------------------------------------------------------------
 # Contour extraction (mirrors perception.py; returns all candidates)
-# ---------------------------------------------------------------------------
 
 
 def _candidates(frame, cfg):
@@ -93,9 +91,7 @@ def _patch(frame, ax, ay, w, h):
     return cv2.resize(gray, (CROP_SIZE, CROP_SIZE), interpolation=cv2.INTER_AREA)
 
 
-# ---------------------------------------------------------------------------
 # Data collection
-# ---------------------------------------------------------------------------
 
 
 def collect(n_episodes=80, max_frames_per_ep=3000, seeds=None):
@@ -136,9 +132,7 @@ def collect(n_episodes=80, max_frames_per_ep=3000, seeds=None):
     return np.array(images, dtype=np.uint8), np.array(labels, dtype=np.int64)
 
 
-# ---------------------------------------------------------------------------
 # Training
-# ---------------------------------------------------------------------------
 
 
 def _oversample(X, y):
@@ -230,9 +224,7 @@ def train(images, labels, n_epochs=30, batch_size=64):
     return model
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+# Entry point for inference code to load the trained model and run on new frames
 
 
 def main():
