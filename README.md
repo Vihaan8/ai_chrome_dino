@@ -207,5 +207,3 @@ The script collects fresh training data by running the classical agent on 80 see
 ## Team
 
 Vihaan Manchanda, Anvita Suresh
-
-IDS 705, Duke University
