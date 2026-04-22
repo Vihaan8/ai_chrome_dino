@@ -17,10 +17,11 @@ We built two agents that play Chrome Dino, one based on hand-coded rules and one
    - [What we built](#what-we-built-1)
    - [Why it matters](#why-it-matters-1)
    - [Decisions we made](#decisions-we-made-1)
-5. [Results](#results)
-6. [Repository Layout](#repository-layout)
-7. [How to Run](#how-to-run)
-8. [Team](#team)
+5. [Evaluation Strategy](#evaluation-strategy)
+6. [Results](#results)
+7. [Repository Layout](#repository-layout)
+8. [How to Run](#how-to-run)
+9. [Team](#team)
 
 
 ## What is Chrome Dino
@@ -122,6 +123,41 @@ Classical cannot distinguish shapes that look similar but mean different things 
 - **Supervised labels from the game's ground truth.** The game knows what it spawned and tags each obstacle with its type. The training script matches each detected bounding box against these, so no hand-labeling was needed.
 - **Same planner as classical.** We only replaced perception. This keeps the comparison fair: any score difference between the two agents is attributable to perception, not to a better policy on top.
 - **Small CNN.** Three convolution blocks is plenty for a three-class problem where the classes are this visually distinct. A larger model would train slower and give nothing back on this data.
+
+
+## Evaluation Strategy
+
+We designed the evaluation so that any score difference between the two agents comes only from the part we changed (perception). Everything else is identical across runs.
+
+### What we held constant
+
+- **Same game code.** Both agents play the same Pygame clone, with the same physics, sprites, obstacle spawn distribution, and speed curve.
+- **Same seed list.** 100 episodes using the cohort pattern `[1..5]` rotated 20 times, so both agents see the same obstacle order on every matching seed.
+- **Same planner.** The rule-based `classical/planner.py` is called by both agents. Only perception differs.
+- **Same frame cap.** Every episode stops at 10,000 frames if the agent has not already died. This keeps runs bounded and makes "reached the cap" a meaningful survival threshold.
+
+### What we measure
+
+For each episode we record the score (frames survived), obstacles cleared, final game speed, and frame-by-frame actions and detections. Across 100 episodes we then compute:
+
+- **Score distribution.** Mean, median, standard deviation, min/max, and percentile breakdowns. Median is more informative than mean because the distributions are long-tailed.
+- **Survival thresholds.** Percent of runs reaching 1,000 frames, 5,000 frames, and the 10,000 cap. Lets us talk about consistency and not just peak score.
+- **Death cause.** What killed the agent: cactus or pterodactyl. A shift in the mix between classical and DL tells us which failure mode each approach fixed.
+- **Per-frame latency.** Average milliseconds spent in perception and in planning, so a faster score is not actually due to a slower pipeline running inside a fixed-time game.
+
+### Failure buckets
+
+`eval/failure_analysis.py` reads every logged run and assigns each death to one of five categories. This is the key diagnostic for "why did the agent fail?" rather than just "how many frames did it last?".
+
+- **survived.** Reached the 10,000-frame cap without dying.
+- **missed_detection.** A real obstacle was on screen but perception reported nothing. The agent had no chance to react.
+- **misclassification.** Perception saw an obstacle but labeled its type wrong. Classical suffers this most from clouds (tagged as cacti).
+- **late_reaction.** Perception found the obstacle only when it was already very close, leaving the planner no time to act.
+- **timing_error.** Perception and classification were both correct, the agent acted, but still collided (usually because the reaction distance was tight at high game speed).
+
+### How to reproduce
+
+Every eval run is deterministic. Given the same code, the same seed, and the same config, you get the exact same score. The commands in [How to Run](#how-to-run) produce the numbers in the results table below, bit-for-bit. The per-episode JSON logs in `eval/runs/` are the raw evidence; `eval/summary_100.txt` and `eval/summary_100_dl.txt` aggregate them.
 
 
 ## Results
