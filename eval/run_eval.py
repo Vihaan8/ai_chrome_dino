@@ -23,9 +23,9 @@ def load_config():
 
 def load_impl(name):
     if name == 'classical':
-        return importlib.import_module('perception'), importlib.import_module('planner')
+        return importlib.import_module('classical.perception'), importlib.import_module('classical.planner')
     if name == 'dl':
-        return importlib.import_module('perception_dl'), importlib.import_module('planner_dl')
+        return importlib.import_module('dl.perception'), importlib.import_module('dl.planner')
     raise ValueError(f'unknown impl: {name}')
 
 

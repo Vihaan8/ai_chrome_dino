@@ -5,10 +5,10 @@ Reference for the DL pipeline in this repo: what it does, how it was trained, ho
 
 ## Current state
 
-- `perception_dl.py` is a two-stage cascade: classical contour detection proposes candidate bounding boxes, then `model_dl.ObstacleClassifier` classifies each 32x32 patch as `decoy`, `ground`, or `flying`. Decoys are suppressed. Distance and height are read from the bbox, same references as classical (`dino_right_edge = 90`, ground tolerance 6).
-- `planner_dl.py` delegates to the classical rule-based planner. No learned planner yet.
-- `model_dl.py` defines a 3-conv-block CNN with BatchNorm and Dropout 0.3.
-- Trained weights live in `weights/cnn.pt` (about 600 KB) and are loaded once per process.
+- `dl/perception.py` is a two-stage cascade: classical contour detection proposes candidate bounding boxes, then `dl.model.ObstacleClassifier` classifies each 32x32 patch as `decoy`, `ground`, or `flying`. Decoys are suppressed. Distance and height are read from the bbox, same references as classical (`dino_right_edge = 90`, ground tolerance 6).
+- `dl/planner.py` delegates to the classical rule-based planner. No learned planner yet.
+- `dl/model.py` defines a 3-conv-block CNN with BatchNorm and Dropout 0.3.
+- Trained weights live in `dl/weights/cnn.pt` (about 600 KB) and are loaded once per process.
 
 
 ## Results on the current game
@@ -32,12 +32,12 @@ DL nearly doubles mean and quadruples median. The CNN solves the decoy problem a
 ## Retraining
 
 ```bash
-python train_perception_dl.py
+python dl/train.py
 ```
 
 The script collects its own training data by running the classical agent on 80 seeded episodes (seeds 200 to 279, disjoint from eval seeds). It labels every contour bbox by IoU-matching against the game's ground-truth `obstacles_raw` list. Training runs 30 epochs of Adam with cosine learning rate decay, weight decay, class oversampling, horizontal flip and brightness augmentation, and best-checkpoint saving by validation accuracy.
 
-Final weights save to `weights/cnn.pt`, replacing whatever was there.
+Final weights save to `dl/weights/cnn.pt`, replacing whatever was there.
 
 Last retrain produced 75,275 labeled patches and reached 100 percent validation accuracy because the color gap between light-blue clouds and dark cacti/pteros makes 3-class classification nearly trivial.
 
@@ -45,21 +45,21 @@ Last retrain produced 75,275 labeled patches and reached 100 percent validation 
 ## Interface
 
 ```
-perception_dl.detect(frame, cfg) -> {
+dl.perception.detect(frame, cfg) -> {
     'present': bool,
     'distance': int or None,     # pixels from x=90 to obstacle left edge, may be negative
     'type': 'ground' or 'flying' or None,
     'height': int or None,       # top-Y of obstacle in frame coordinates
 }
 
-planner_dl.decide(obstacle_info, game_speed, cfg) -> 'none' or 'jump' or 'duck'
+dl.planner.decide(obstacle_info, game_speed, cfg) -> 'none' or 'jump' or 'duck'
 ```
 
 DL-specific config lives under a `dl:` section in `app/config.yaml`:
 
 ```yaml
 dl:
-  model_path: weights/cnn.pt
+  model_path: dl/weights/cnn.pt
   device: cpu
 ```
 

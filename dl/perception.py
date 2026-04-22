@@ -11,7 +11,7 @@ Contract (DL_INTERFACE.md):
                            'type': 'ground' | 'flying' | None,
                            'height': int or None}
 
-Train the model first:  python train_perception_dl.py
+Train the model first:  python dl/train.py
 """
 
 import os
@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 import torch
 
-from model_dl import ObstacleClassifier
+from dl.model import ObstacleClassifier
 
 # each crop is resized to this before going into the cnn
 CROP_SIZE = 32
@@ -42,7 +42,7 @@ def _load_model(cfg):
     path = dl.get("model_path", os.path.join(root, "weights", "cnn.pt"))
     if not os.path.exists(path):
         raise FileNotFoundError(
-            f"Model weights not found at {path}. " "Run: python train_perception_dl.py"
+            f"Model weights not found at {path}. " "Run: python dl/train.py"
         )
     _device = torch.device(dl.get("device", "cpu"))
     _model = ObstacleClassifier().to(_device)

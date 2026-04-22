@@ -1,8 +1,8 @@
 """
 Collect training data from live game episodes and train the CNN.
 
-Run once:  python train_perception_dl.py
-Output:    weights/cnn.pt
+Run once:  python dl/train.py
+Output:    dl/weights/cnn.pt
 """
 
 import copy
@@ -15,14 +15,15 @@ import torch
 import torch.nn as nn
 import yaml
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from app import controller
 from app.game import Game
-from model_dl import ObstacleClassifier
-import perception as classical_perception
-import planner as classical_planner
+from dl.model import ObstacleClassifier
+from classical import perception as classical_perception
+from classical import planner as classical_planner
 
 # size each crop gets resized to before saving / training
 CROP_SIZE = 32
@@ -228,7 +229,7 @@ def train(images, labels, n_epochs=30, batch_size=64):
 
 
 def main():
-    os.makedirs(os.path.join(ROOT, "weights"), exist_ok=True)
+    os.makedirs(os.path.join(HERE, "weights"), exist_ok=True)
 
     print("=== Collecting training data ===")
     images, labels = collect()
@@ -241,7 +242,7 @@ def main():
     print("\n=== Training CNN ===")
     model = train(images, labels)
 
-    out = os.path.join(ROOT, "weights", "cnn.pt")
+    out = os.path.join(HERE, "weights", "cnn.pt")
     torch.save(model.state_dict(), out)
     print(f"\nSaved weights -> {out}")
     print("Done. Run: python main.py --impl dl")

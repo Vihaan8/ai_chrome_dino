@@ -25,5 +25,5 @@ eval:
   max_frames: 10000
 
 dl:
-  model_path: weights/cnn.pt
+  model_path: dl/weights/cnn.pt
   device: cpu

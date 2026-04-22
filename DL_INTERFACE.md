@@ -7,8 +7,8 @@ Frozen contract that both implementations (classical and DL) obey. Both implemen
 
 | Implementation | Perception module | Planner module |
 |---|---|---|
-| Classical | `perception.py` | `planner.py` |
-| DL | `perception_dl.py` | `planner_dl.py` |
+| Classical | `classical/perception.py` | `classical/planner.py` |
+| DL | `dl/perception.py` | `dl/planner.py` |
 
 
 ## Signatures
@@ -36,19 +36,19 @@ Distance is measured from the dino's right edge at x=90 to the obstacle's left e
 
 ## What a DL implementation can replace
 
-- Perception only. Replace `perception_dl.py` with a learned detector. Keep `planner_dl.py` as the default delegation to classical `planner.decide`.
-- Planner only. Leave `perception_dl.py` as a delegation to classical `perception.detect` and put the learned policy in `planner_dl.py`.
+- Perception only. Replace `dl/perception.py` with a learned detector. Keep `dl/planner.py` as the default delegation to the classical planner.
+- Planner only. Leave `dl/perception.py` as a delegation to classical perception and put the learned policy in `dl/planner.py`.
 - Both. End-to-end replacement.
 
-`planner_dl.py` ships as a delegation to the classical planner by default. Change only what needs changing.
+`dl/planner.py` ships as a delegation to the classical planner by default. Change only what needs changing.
 
 
 ## Module layout
 
 | Path | Purpose |
 |---|---|
-| `perception.py`, `planner.py` | Classical implementation |
-| `perception_dl.py`, `planner_dl.py`, `model_dl.py`, `train_perception_dl.py` | DL implementation |
+| `classical/` (`perception.py`, `planner.py`) | Classical implementation |
+| `dl/` (`perception.py`, `planner.py`, `model.py`, `train.py`, `weights/`) | DL implementation |
 | `app/`, `eval/`, `main.py`, `DL_INTERFACE.md`, `TODO_DL.md`, `README.md` | Shared across implementations |
 
 Keys under a `dl:` section in `app/config.yaml` are for the DL pipeline only and the classical modules ignore them. Keys outside that section affect both implementations and should be changed only when both still work.

@@ -11,7 +11,7 @@ implement it here.
 Default: delegate to the classical planner. Swap when needed.
 """
 
-from planner import decide as _classical_decide
+from classical.planner import decide as _classical_decide
 
 
 def decide(obstacle_info, game_speed, cfg):
