@@ -5,10 +5,10 @@ Frozen contract that both implementations (classical and DL) obey. Both implemen
 
 ## Module pairs
 
-| Implementation | Perception module | Planner module | Owner |
-|---|---|---|---|
-| Classical | `perception.py` | `planner.py` | Vihaan |
-| DL | `perception_dl.py` | `planner_dl.py` | Anvita |
+| Implementation | Perception module | Planner module |
+|---|---|---|
+| Classical | `perception.py` | `planner.py` |
+| DL | `perception_dl.py` | `planner_dl.py` |
 
 
 ## Signatures
@@ -43,15 +43,15 @@ Distance is measured from the dino's right edge at x=90 to the obstacle's left e
 `planner_dl.py` ships as a delegation to the classical planner by default. Change only what needs changing.
 
 
-## Shared vs private
+## Module layout
 
-| Path | Who can edit |
+| Path | Purpose |
 |---|---|
-| `perception.py`, `planner.py` | Vihaan |
-| `perception_dl.py`, `planner_dl.py` | Anvita |
-| `app/`, `eval/`, `main.py`, `DL_INTERFACE.md`, `TODO_DL.md`, `README.md` | Either, with coordination |
+| `perception.py`, `planner.py` | Classical implementation |
+| `perception_dl.py`, `planner_dl.py`, `model_dl.py`, `train_perception_dl.py` | DL implementation |
+| `app/`, `eval/`, `main.py`, `DL_INTERFACE.md`, `TODO_DL.md`, `README.md` | Shared across implementations |
 
-Any new key added under a `dl:` section in `app/config.yaml` is owned by Anvita and ignored by the classical modules. Any new key outside that section needs both owners to agree.
+Keys under a `dl:` section in `app/config.yaml` are for the DL pipeline only and the classical modules ignore them. Keys outside that section affect both implementations and should be changed only when both still work.
 
 
 ## Eval

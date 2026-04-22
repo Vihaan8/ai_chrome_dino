@@ -3,7 +3,7 @@ perception:
   crop_x_end: 500
   crop_y_start: 80
   crop_y_end: 160
-  threshold: 150
+  threshold: 220
   min_contour_area: 50
   ground_line_y: 160
   ground_tolerance: 6

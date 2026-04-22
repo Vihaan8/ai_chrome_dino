@@ -2,9 +2,9 @@
 
 Can a hand-tuned classical pipeline play Chrome Dino at high speeds, and where does it break down before a learned pipeline takes over?
 
-Chrome Dino is a reactive obstacle-avoidance game where a running character jumps over cacti and ducks under pterodactyls while the game speed keeps increasing. Classical computer vision (fixed thresholds, contour detection, and rule-based control) is fast and interpretable but sensitive to hand-picked decision boundaries. We build two versions of the agent in one repository that share a game engine and an evaluation harness: a classical perception plus planner (Vihaan), and a learned DL perception or planner (Anvita). The game also spawns cloud-shaped decoys that classical perception cannot distinguish from real obstacles, so wasted jumps create compounding failures at high speed. Both versions plug into the same Pygame clone through frozen function signatures and are compared on the same seed list.
+Chrome Dino is a reactive obstacle-avoidance game where a running character jumps over cacti and ducks under pterodactyls while the game speed keeps increasing. Classical computer vision (fixed thresholds, contour detection, and rule-based control) is fast and interpretable but sensitive to hand-picked decision boundaries. We build two versions of the agent in one repository that share a game engine and an evaluation harness: a classical perception plus planner, and a learned DL perception. The game also spawns light-blue cloud-shaped decoys at random Y positions. The clouds look visibly different from cacti to a human but a fixed-threshold contour detector still picks them up as dark shapes, so classical is forced to act on them. Both versions plug into the same Pygame clone through frozen function signatures and are compared on the same seed list.
 
-On 100 seeded episodes with decoys enabled, the classical agent scores a mean of 1,784 (median 1,156, stdev 1,882). Only 8 percent of runs reach 5,000 frames; 67 percent of deaths are cacti and 33 percent are pterodactyls catching the dino while it is mid-recovery from a cloud-induced jump. 47 percent of failures categorize as misclassification (clouds tagged as cacti), 53 percent as timing errors. Perception still runs in 16 microseconds per frame, but speed is no longer the bottleneck. The DL version replaces perception with a small CNN that classifies detected blobs as ground obstacle, flying obstacle, or cloud decoy. Over the same 100 seeded episodes it scores a mean of 4,895 (median 4,075), with 46 percent of runs reaching 5,000 frames. Misclassification failures drop from 47 percent to 4 percent, confirming that learned perception cleanly suppresses cloud decoys. The remaining gap to the pre-decoy ceiling (~8,200) is explained by timing errors at high game speed, a planning problem not a perception one.
+On 100 seeded episodes, the classical agent scores a mean of 2,511 (median 1,302, stdev 2,501); only 16 percent of runs reach 5,000 frames and zero reach the 10,000-frame cap. The DL version replaces perception with a two-stage pipeline: classical contour detection proposes candidate bounding boxes, and a small 3-class CNN labels each patch as ground obstacle, flying obstacle, or decoy. Over the same 100 seeded episodes it scores a mean of 4,869 (median 5,253), with 50 percent of runs reaching 5,000 frames. Misclassification failures drop from 57 percent to 4 percent, confirming that the learned classifier suppresses cloud decoys near-perfectly. The remaining gap to the pre-decoy classical ceiling of about 8,200 is split between timing errors at high speed (57 percent of failures) and missed detections inherited from the classical contour stage (39 percent). DL perception runs at 0.181 ms per frame, 10x classical, still well inside the 16 ms budget a 60 fps game allows.
 
 
 ## Big picture
@@ -19,25 +19,25 @@ The classical version hand-codes each step. The DL version replaces perception o
 ```
 .
 ├── main.py                      # watch / batch game loop entry point
-├── perception.py                # classical contour detector  (Vihaan)
-├── planner.py                   # classical rule-based planner (Vihaan)
-├── perception_dl.py             # DL detector  (Anvita)
-├── planner_dl.py                # DL planner, defaults to classical (Anvita)
+├── perception.py                # classical contour detector
+├── planner.py                   # classical rule-based planner
+├── perception_dl.py             # DL detector (CNN classifier on contour bboxes)
+├── planner_dl.py                # DL planner (defaults to classical)
 ├── model_dl.py                  # CNN definition shared by training and inference
 ├── train_perception_dl.py       # data collection + CNN training script
 ├── weights/                     # trained model weights (cnn.pt)
 ├── requirements.txt
-├── app/                         # shared game engine and config
-│   ├── game.py                  # ~265 line Pygame clone with pixel sprites
+├── app/                         # game engine and config
+│   ├── game.py                  # Pygame clone with pixel sprites
 │   ├── controller.py            # action dispatcher
 │   └── config.yaml              # all thresholds, crop region, eval settings
-├── eval/                        # shared evaluation harness
+├── eval/                        # evaluation harness
 │   ├── run_eval.py              # batch seeded episodes, per-run JSON logs, summary stats
 │   ├── failure_analysis.py      # categorize deaths into 5 buckets
 │   ├── summary_100.txt          # latest classical 100-run summary (tracked)
 │   └── runs/                    # per-episode JSON logs (gitignored)
 ├── DL_INTERFACE.md              # frozen signatures both implementations obey
-├── TODO_DL.md                   # Anvita's handoff checklist
+├── TODO_DL.md                   # DL implementation checklist
 └── README.md
 ```
 
@@ -109,7 +109,7 @@ flowchart LR
 
 Obstacles spawn at 55 to 140 frame intervals, move leftward at the current game speed, and are removed when they go off-screen. Sprites are pixel-art silhouettes composed from ASCII grids at 4x scale. The dino has a two-frame running animation, the pterodactyl flaps its wings, and the ducking pose is a flattened version of the running dino.
 
-The game also spawns cloud-shaped decoys on their own timer (every 160 to 340 frames). Clouds are drawn as dark silhouettes at a cactus-like Y position, so a classical contour detector classifies them as ground obstacles. They pass through the dino with no collision. This is the visual complication the DL version is designed to handle: the clouds and the real cacti are visually similar but only one of them matters for collision, and classical perception has no way to tell them apart from silhouette alone.
+The game also spawns light-blue fluffy cloud decoys on their own timer (every 160 to 340 frames). Each cloud appears at a random Y in the range 85 to 135, so its effect on classical depends on where it spawns: at ground Y it looks like a cactus and classical jumps, at ptero-high Y it looks like a flying obstacle and classical ducks. The cloud is visually obvious to a human (light blue, cloud-shaped, very different from a dark cactus), but the classical contour detector works on a fixed brightness threshold so it sees the cloud as another dark silhouette and acts on it. This is the visual complication the DL version is designed to handle.
 
 | Parameter | Value | Purpose |
 |---|---|---|
@@ -123,7 +123,9 @@ The game also spawns cloud-shaped decoys on their own timer (every 160 to 340 fr
 | `cactus_w`, `cactus_h` | 20, 40 | ground obstacle size |
 | `ptero_w`, `ptero_h` | 40, 20 | flying obstacle size |
 | `ptero_high_y`, `ptero_low_y` | 108, 135 | must-duck and must-jump spawn heights |
-| `cloud_w`, `cloud_h`, `cloud_y` | 48, 20, 135 | decoy size and spawn Y (bottom at 155, classical reads as ground) |
+| `cloud_w`, `cloud_h` | 56, 24 | decoy size (fluffy shape, light blue) |
+| `cloud_y_min`, `cloud_y_max` | 85, 135 | decoy spawn Y range |
+| `cloud_color` | RGB(170, 200, 230) | light sky blue (classical threshold was raised to 220 so this still registers as "dark") |
 | `spawn_cloud_min`, `spawn_cloud_max` | 160, 340 | frames between decoy spawns (roughly one cloud per two real obstacles) |
 
 
@@ -135,7 +137,7 @@ The perception module looks at one frame at a time, finds the nearest dark shape
 flowchart LR
     F["BGR Frame"] --> CR["Crop x=50..500, y=80..160"]
     CR --> GR["Grayscale"]
-    GR --> T["Threshold (< 150 is dark)"]
+    GR --> T["Threshold (< 220 is dark)"]
     T --> CN["findContours RETR_EXTERNAL"]
     CN --> FL["Filter: area >= 50, drop dino contour"]
     FL --> CL["Classify: bottom >= 154 is ground, else flying"]
@@ -150,7 +152,7 @@ The dino itself lives inside the perception crop because we want to keep seeing 
 |---|---|---|
 | `crop_x_start`, `crop_x_end` | 50, 500 | horizontal extent of the scan region |
 | `crop_y_start`, `crop_y_end` | 80, 160 | vertical extent (excludes the ground line) |
-| `threshold` | 150 | grayscale cutoff for dark pixels |
+| `threshold` | 220 | grayscale cutoff for "dark" pixels (raised from 150 so the light-blue cloud is caught; background at 247 still filters out) |
 | `min_contour_area` | 50 | noise filter; cactus area is about 800, ptero about 800 |
 | `ground_line_y`, `ground_tolerance` | 160, 6 | contour bottom at or below 154 counts as ground |
 | `dino_right_edge` | 90 | reference point for distance measurement |
@@ -199,46 +201,46 @@ Each episode writes a JSON log to `eval/runs/run_<impl>_<seed>_<i>.json`. Logs i
 
 ## Classical Results
 
-Scores are highly variable with decoys turned on. Classical perception cannot tell a cloud from a cactus, so the agent jumps on clouds; jumps commit the dino to 35 airborne frames, and if a real obstacle arrives during that window the dino lands on it. Earlier runs that would have hit the speed-36 cliff now die much earlier because cloud-induced jumps bring the crash point forward.
+Classical runs the same threshold-and-contour pipeline every frame. It handles cacti and pterodactyls correctly, but treats every cloud as a dark obstacle. Depending on where the cloud spawns, that forces either a jump (expensive: 35 airborne frames) or a duck (cheap: one-frame entry and exit). Jumps that land during the arrival of a real obstacle are the main source of death.
 
 ### Score and survival
 
 | Metric | Mean | Median | Min | Max | Stdev |
 |---|---|---|---|---|---|
-| Score (frames survived) | 1,783.8 | 1,156 | 281 | 8,637 | 1,882.1 |
-| Obstacles cleared | 17.0 | 10 | 1 | 88 | 19.9 |
-| Final game speed | n/a | n/a | 7.12 | 40.54 | n/a |
+| Score (frames survived) | 2,510.9 | 1,302 | 301 | 9,426 | 2,501.0 |
+| Obstacles cleared | 24.4 | 11 | 1 | 98 | 25.8 |
+| Final game speed | n/a | n/a | 7.20 | 43.70 | n/a |
 
 | Score percentile | p10 | p25 | p50 | p75 | p90 | p95 |
 |---|---|---|---|---|---|---|
-| Value | 348 | 548 | 1,156 | 2,309 | 4,761 | 6,621 |
+| Value | 386 | 745 | 1,302 | 3,607 | 7,616 | 8,346 |
 
 | Threshold | Percent of runs reaching it |
 |---|---|
-| 1,000 frames | 54.0% |
-| 5,000 frames | 8.0% |
+| 1,000 frames | 59.0% |
+| 5,000 frames | 16.0% |
 | 10,000 frames (the cap) | 0.0% |
 
 ### Death cause
 
-Deaths are no longer a single failure mode. A third of them are now pterodactyls, which happens when the agent is recovering from a cloud-induced jump and a real ptero arrives before the dino can act again. This is a regression from the pre-decoy version where 100 percent of deaths were cacti and pterodactyls were handled perfectly.
+About a quarter of deaths are pterodactyls, which happens when the agent is committed to a cloud-induced jump and a real ptero arrives before the dino can act again. This is a regression from the pre-decoy version where 100 percent of deaths were cacti.
 
 | Type | Count | Fraction |
 |---|---|---|
-| Ground (cactus) | 67 | 67.0% |
-| Flying (pterodactyl) | 33 | 33.0% |
+| Ground (cactus) | 73 | 73.0% |
+| Flying (pterodactyl) | 27 | 27.0% |
 
 ### Failure analysis
 
-The failure analysis now shows two roughly equal failure modes. `misclassification` catches frames where classical perception reports a type that differs from what the game internally tagged, which is exactly what clouds cause (perception says ground, game says decoy). `timing_error` catches frames where the agent acted on a real obstacle but still collided, usually because a previous cloud-induced jump had not yet fully resolved.
+More than half of all failures are misclassification (perception reported one type but the game internally tagged the obstacle as a decoy). The other main bucket is timing error, where the agent acted correctly on a real obstacle but collided anyway, usually because a prior cloud-induced jump had not fully resolved.
 
 | Category | Count | Fraction |
 |---|---|---|
 | survived | 0 | 0.0% |
 | missed_detection | 0 | 0.0% |
-| misclassification | 47 | 47.0% |
+| misclassification | 57 | 57.0% |
 | late_reaction | 0 | 0.0% |
-| timing_error | 53 | 53.0% |
+| timing_error | 43 | 43.0% |
 
 ### Per-frame latency
 
@@ -250,20 +252,18 @@ The failure analysis now shows two roughly equal failure modes. `misclassificati
 
 ## Why the classical agent plateaus
 
-The failure mode has two flavors now, and the second is the interesting one.
+Classical has two failure flavors, and the second is the interesting one.
 
-The first flavor is the same as before decoys: at high game speeds the linear reaction distance (`70 + 2.0 * game_speed`) stops being large enough given how far an obstacle moves per frame. Raising `planner.speed_factor` from 2.0 to something like 4.0 or 6.0 fixes it. We still keep the value tight on purpose so the eval shows real, categorizable failures.
+The first is a high-speed timing bug that existed even before decoys. The linear reaction distance (`70 + 2.0 * game_speed`) stops being large enough once obstacles move far enough per frame that distance steps past the threshold in a single frame. Raising `planner.speed_factor` from 2.0 to 4.0 or 6.0 fixes it. We keep the value tight on purpose so the eval still shows real, categorizable failures.
 
-The second flavor is the decoy response. Classical perception finds any dark blob above a certain size in the crop region and classifies it by position: contour bottom at or below Y=154 is a ground obstacle, anything higher is flying. Cloud decoys are drawn at Y=135 with height 20, putting their bottom at Y=155. From classical's perspective they are indistinguishable from cacti. The planner jumps. The jump commits the dino to 35 airborne frames. If a real obstacle arrives during that window, the dino has no way to react, and collision happens either in the air (flying obstacle) or at the moment of landing (ground obstacle). This is why 33 percent of deaths are now pterodactyls and why the median score collapsed from 8,354 to 1,156.
+The second is the decoy response. Classical perception sees a dark blob, finds its bounding box, and classifies by the bottom Y: at or below Y=154 counts as ground, anything higher counts as flying. The light-blue cloud at random Y in [85, 135] passes the raised threshold (grayscale about 194, below 220), so classical sees it. Cloud at ground Y means the planner jumps. Cloud at ptero-high Y means the planner ducks. Jumps are expensive (35 airborne frames with no ability to re-react); ducks are cheap. Random Y therefore gives classical a mix of costly and harmless decoys. If a real cactus arrives during a cloud-induced jump, the dino lands on it. This is why 27 percent of deaths are pterodactyls in the post-decoy eval and why the median score dropped from the pre-decoy 8,354 to 1,302.
 
-Classical can patch this with another rule. For example, size-filter: clouds are 48 pixels wide, cacti are 20 pixels wide; treat wide dark blobs as decoys. That works until we change the cloud sprite, or add a new obstacle type, or let the clouds overlap with cacti in the frame. Every patch adds another brittle threshold.
-
-This is the point of comparison for the DL version. A learned perception module trained on frames where clouds are labeled as non-obstacles should be able to ignore them without a separate rule. If the DL mean score stays near the pre-decoy classical ceiling of about 8,200 while our classical agent collapses to 1,784, the delta is the real contribution of learning.
+Classical can patch this with more rules: a size filter (clouds are 56 pixels wide, cacti are 20), a color filter (clouds have a blue channel), a per-position whitelist. Each patch works until the next visual change breaks it. That brittleness is the entire motivation for a learned classifier.
 
 
 ## DL Handoff
 
-The DL code lives in the same repository. Anvita owns `perception_dl.py`, `planner_dl.py`, `model_dl.py`, and `train_perception_dl.py`. `perception_dl.detect` runs a CNN-based detector; `planner_dl.decide` delegates to the classical planner (perception-only replacement). Trained weights live in `weights/cnn.pt`; retrain by running `python train_perception_dl.py`.
+The DL code lives in the same repository alongside the classical modules. `perception_dl.py`, `planner_dl.py`, `model_dl.py`, and `train_perception_dl.py` are the DL files. `perception_dl.detect` runs a CNN-based detector; `planner_dl.decide` delegates to the classical planner (perception-only replacement). Trained weights live in `weights/cnn.pt`; retrain by running `python train_perception_dl.py`.
 
 Both files must obey the frozen contract in `DL_INTERFACE.md`:
 
@@ -281,88 +281,98 @@ The concrete checklist, suggested approaches, and eval parity requirements are i
 
 ## DL Results
 
-100 seeded episodes, same seeds and `max_frames` cap as the classical eval. DL perception uses a 3-class CNN (ground / flying / decoy) on top of the same contour-detection candidate pipeline. The planner is unchanged from classical.
+100 seeded episodes, same seeds and `max_frames` cap as the classical eval. DL perception is a two-stage pipeline: classical contour detection finds candidate bounding boxes, then a small 3-class CNN classifies each 32x32 patch as ground / flying / decoy. Decoys are suppressed, distance and height come from the bounding box geometry. The planner is unchanged from classical.
 
 ### DL score and survival
 
 | Metric | Mean | Median | Min | Max | Stdev |
 |---|---|---|---|---|---|
-| Score (frames survived) | 4,895.4 | 4,075 | 297 | 9,451 | 3,142.6 |
-| Obstacles cleared | 49.2 | 41 | 1 | 96 | 32.4 |
-| Final game speed | n/a | n/a | 7.19 | 43.80 | n/a |
+| Score (frames survived) | 4,869.1 | 5,253 | 306 | 9,368 | 3,215.4 |
+| Obstacles cleared | 48.8 | 51 | 1 | 94 | 33.4 |
+| Final game speed | n/a | n/a | 7.22 | 43.47 | n/a |
 
 | Score percentile | p10 | p25 | p50 | p75 | p90 | p95 |
 |---|---|---|---|---|---|---|
-| Value | 916 | 1,954 | 4,075 | 8,357 | 8,473 | 9,192 |
+| Value | 690 | 1,731 | 5,253 | 8,318 | 8,428 | 9,152 |
 
 | Threshold | Percent of runs reaching it |
 |---|---|
-| 1,000 frames | 88.0% |
-| 5,000 frames | 46.0% |
+| 1,000 frames | 84.0% |
+| 5,000 frames | 50.0% |
 | 10,000 frames (the cap) | 0.0% |
 
 ### DL death cause
 
 | Type | Count | Fraction |
 |---|---|---|
-| Ground (cactus) | 82 | 82.0% |
-| Flying (pterodactyl) | 18 | 18.0% |
+| Ground (cactus) | 83 | 83.0% |
+| Flying (pterodactyl) | 17 | 17.0% |
 
 ### DL failure analysis
+
+Misclassification dropped from 57 percent under classical to 4 percent, nearly solving the cloud problem. The new dominant failure modes are `timing_error` (the high-speed planner issue classical also has) and `missed_detection`, which is the structural cost of a cascade approach: if the contour stage drops a real obstacle, the CNN never sees it and the cascade fails without recovery.
 
 | Category | Count | Fraction |
 |---|---|---|
 | survived | 0 | 0.0% |
-| missed_detection | 37 | 37.0% |
+| missed_detection | 39 | 39.0% |
 | misclassification | 4 | 4.0% |
 | late_reaction | 0 | 0.0% |
-| timing_error | 59 | 59.0% |
+| timing_error | 57 | 57.0% |
 
 ### DL per-frame latency
 
 | Stage | Time |
 |---|---|
-| Perception | 0.156 ms per frame |
-| Planning | under 0.001 ms per frame |
+| Perception | 0.181 ms per frame (about 10x classical, still well under 1 ms) |
+| Planning | under 0.001 ms per frame (shared classical planner) |
 
 ### Which parts of the pipeline are learned
 
 | Module | Implementation |
 |---|---|
-| Perception | CNN classifier — contour candidates classified as ground / flying / decoy |
+| Perception | Two-stage cascade: classical contour detection proposes bboxes; 3-class CNN (BatchNorm, Dropout 0.3) classifies each 32x32 crop |
 | Planner | Unchanged from classical (rule-based reaction distance) |
 | Config keys added under `dl:` | `model_path`, `device` |
+
+### Training data
+
+`train_perception_dl.py` runs the classical agent on 80 seeded episodes (seeds 200 to 279, disjoint from eval seeds), labels every contour bbox by IoU-matching to the game's ground-truth `obstacles_raw` list, and collects 32x32 grayscale patches. For this harder-game variant the script collected 75,275 labeled patches across three classes. Training uses 30 epochs of Adam with cosine learning rate decay, weight decay, class oversampling, horizontal flip and brightness augmentation, and best-checkpoint saving by validation accuracy. On the light-blue cloud game the CNN reaches 100 percent validation accuracy because the color gap between light-blue clouds and dark cacti/pteros makes 3-class classification trivial.
 
 
 ## Classical vs DL Comparison
 
-Same 100 seeds, same `max_frames`, same game code. Both runs have decoys enabled.
+Same 100 seeds, same `max_frames`, same game code.
 
 | Metric | Classical | DL | Delta |
 |---|---|---|---|
-| Mean score | 1,784 | 4,895 | +3,111 (+174%) |
-| Median score | 1,156 | 4,075 | +2,919 (+253%) |
-| Stdev | 1,882 | 3,143 | +1,261 |
-| Percent reaching 1,000 | 54.0% | 88.0% | +34pp |
-| Percent reaching 5,000 | 8.0% | 46.0% | +38pp |
-| Percent reaching cap | 0.0% | 0.0% | — |
-| Ground deaths | 67.0% | 82.0% | +15pp |
-| Flying deaths | 33.0% | 18.0% | −15pp |
-| Misclassification failures | 47.0% | 4.0% | −43pp |
-| Timing-error failures | 53.0% | 59.0% | +6pp |
-| Perception latency | 0.016 ms | 0.156 ms | +0.14 ms (10×) |
-| Planning latency | under 0.001 ms | under 0.001 ms | — |
+| Mean score | 2,511 | **4,869** | **+2,358 (+94%)** |
+| Median score | 1,302 | **5,253** | **+3,951 (+304%)** |
+| Max | 9,426 | 9,368 | similar |
+| Stdev | 2,501 | 3,215 | DL more spread |
+| Percent reaching 1,000 | 59.0% | 84.0% | +25pp |
+| Percent reaching 5,000 | 16.0% | 50.0% | +34pp (3.1x) |
+| Percent reaching cap | 0.0% | 0.0% | neither makes it |
+| Ground deaths | 73 | 83 | more cactus-shaped deaths |
+| Flying deaths | 27 | 17 | -10 |
+| Misclassification failures | 57.0% | **4.0%** | **-53pp** |
+| Missed-detection failures | 0.0% | 39.0% | +39pp (new DL failure mode) |
+| Timing-error failures | 43.0% | 57.0% | +14pp |
+| Perception latency | 0.016 ms | 0.181 ms | 10x slower, still under 1 ms |
+| Planning latency | under 0.001 ms | under 0.001 ms | shared planner |
 
 ### Short analysis
 
-The DL agent's mean score of 4,895 is 174% higher than the classical baseline of 1,784, with the survival rate at 5,000 frames jumping from 8% to 46%. The entire gain comes from the CNN suppressing cloud decoys: misclassification failures dropped from 47% to 4%, directly eliminating the wasted jumps that caused the classical agent to be mid-air when real obstacles arrived. Flying deaths fell from 33% to 18% for exactly this reason — the DL agent is no longer airborne at the wrong moment because it ignored clouds. The CNN learned to distinguish the oval cloud sprite from the narrow cactus and bird shapes cleanly, reaching 100% validation accuracy on three visually distinct classes.
+Where DL won. The CNN almost entirely solved the decoy problem: misclassification dropped from 57 percent of failures to 4 percent. Every cloud that the classical agent used to see as a cactus or a ptero, the CNN correctly labels as a decoy. Downstream, that means the dino is not airborne when real obstacles arrive, and the flying-death rate dropped from 27 to 17 of 100 runs. The median score nearly quadrupled (1,302 to 5,253), the 5,000-frame survival rate tripled (16 to 50 percent), and mean score almost doubled. All gains come from perception, since the planner is the same rule-based code classical uses.
 
-The DL agent does not recover the full pre-decoy ceiling of ~8,200. Timing errors rose slightly (53% → 59%), and missed detections now account for 37% of failures. Both point to the same root cause: at high game speeds (above ~35 px/frame, which corresponds to scores above ~7,500), even perfect perception leaves only a handful of frames between detection and collision, and the reaction distance formula inherited from the classical planner was not tuned for a DL perception that has different latency characteristics. Perception is also 10× slower (0.156 ms vs 0.016 ms per frame), which is still well within the 16ms frame budget but marginally reduces available reaction time at the highest speeds. The remaining gap to the pre-decoy ceiling is a planning problem, not a perception problem.
+Where DL lost. 39 percent of DL failures are `missed_detection`, a category classical never hits. This is the structural cost of the two-stage cascade: the CNN is called only on bboxes that the classical contour stage already found. When contour detection drops a real obstacle at high speed (intermediate frames between spawn and arrival where the blob happens to fall below the min-area filter, or transient alignment issues), the CNN never sees it and the cascade never recovers. Classical has a similar failure under the hood, but its `misclassification` rate was so high that `missed_detection` never showed up as a primary cause. The pattern here is the classical perception-recall ceiling showing through the DL wrapper.
+
+DL does not reach the 10,000-frame cap on any seed, unlike an end-to-end CNN perception approach which does. The cascade's advantage (near-perfect classification of candidates the contour stage does surface) trades against its limit (inability to see what the contour stage misses). Both approaches are legitimate; this one favors interpretability and a smaller model, at the cost of a bounded recall.
 
 
 ## Team
 
-Vihaan Manchanda (classical), Anvita Suresh (DL)
+Vihaan Manchanda, Anvita Suresh
 
 IDS 705, Duke University
 
@@ -373,4 +383,4 @@ IDS 705, Duke University
 - DL interface contract: `DL_INTERFACE.md`.
 - DL handoff checklist: `TODO_DL.md`.
 - Classical eval summary: `eval/summary_100.txt`.
-- DL eval summary (pending): `eval/summary_100_dl.txt`.
+- DL eval summary: `eval/summary_100_dl.txt`.

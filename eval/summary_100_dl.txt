@@ -1,49 +1,57 @@
 impl=dl  episodes=100  seeds rotated through [1..5] x 20 cohorts
-game variant=decoys enabled (same game as classical baseline)
-approach=CNN classifier (contour detection + 3-class CNN: ground / flying / decoy)
+game variant=light-blue fluffy cloud decoys at random Y in [85, 135], no collision
+approach=CNN classifier (contour detection proposes bboxes, 3-class CNN labels each
+         bbox as decoy / ground / flying, geometry from bbox)
 
-score:              mean=4895.4  median=4075  max=9451  min=297  stdev=3142.6
-obstacles cleared:  mean=49.2    median=41    max=96    min=1    stdev=32.4
-final game speed:   min=7.19     max=43.80
+score:              mean=4869.1  median=5253  max=9368  min=306  stdev=3215.4
+obstacles cleared:  mean=48.8    median=51    max=94    min=1    stdev=33.4
+final game speed:   min=7.22     max=43.47
 
 survival thresholds:
-  % reaching  1000: 88.0%
-  % reaching  5000: 46.0%
-  % reaching 10000:  0.0%  (max_frames cap)
+  % reaching  1000:  84.0%
+  % reaching  5000:  50.0%
+  % reaching 10000:   0.0%  (max_frames cap)
 
 score percentiles:
-  p10=916  p25=1954  p50=4075  p75=8357  p90=8473  p95=9192
+  p10=690  p25=1731  p50=5253  p75=8318  p90=8428  p95=9152
 
 death cause:
-  ground (cactus):        82  (82.0%)
-  flying (pterodactyl):   18  (18.0%)
+  ground (cactus):        83  ( 83.0%)
+  flying (pterodactyl):   17  ( 17.0%)
 
 failure analysis (eval/failure_analysis.py):
-  survived            0  ( 0.0%)
-  missed_detection   37  (37.0%)
-  misclassification   4  ( 4.0%)
-  late_reaction       0  ( 0.0%)
-  timing_error       59  (59.0%)
+  survived            0  (  0.0%)
+  missed_detection   39  ( 39.0%)  contour stage missed a real obstacle; CNN never saw it
+  misclassification   4  (  4.0%)  CNN classified wrong type (rare)
+  late_reaction       0  (  0.0%)
+  timing_error       57  ( 57.0%)  acted but still collided (planner problem, not perception)
 
 per-frame latency:
-  perception:  0.156 ms/frame
-  planning:    0.000 ms/frame
+  perception:  0.181 ms/frame  (~10x classical, still well under the 16ms budget at 60fps)
+  planning:    0.000 ms/frame  (shared classical planner)
 
-comparison vs the classical-with-decoys baseline (identical seeds):
-  mean score:            1783.8 -> 4895.4   (+3111.6, +174%)
-  median score:          1156   -> 4075     (+2919,   +253%)
-  stdev:                 1882.1 -> 3142.6   (higher variance)
-  percent reaching 5k:   8.0%   -> 46.0%   (+38pp)
-  percent flying deaths: 33.0%  -> 18.0%   (-15pp)
-  percent misclass:      47.0%  ->  4.0%   (-43pp)
+comparison vs classical on the same seeds:
+  mean score:            2510.9 -> 4869.1   (+2358.2, +94%)
+  median score:          1302   -> 5253     (+3951,   +304%)
+  stdev:                 2501.0 -> 3215.4   (higher variance)
+  percent reaching 1k:   59.0%  -> 84.0%   (+25pp)
+  percent reaching 5k:   16.0%  -> 50.0%   (+34pp)
+  percent flying deaths: 27.0%  -> 17.0%   (-10pp)
+  percent misclass:      57.0%  ->  4.0%   (-53pp)  CNN suppresses clouds cleanly
 
 notes:
-  Model: 3-layer CNN (~200K params), 32x32 grayscale crops, trained on 80 episodes
-  (seeds 200-279, disjoint from eval seeds). Classical agent used for data collection
-  to get longer episodes; obstacles_raw ground truth used for labeling.
-  Training: 30 epochs, Adam lr=1e-3, cosine LR schedule, class oversampling.
-  Val accuracy: 100% (3 visually distinct sprite classes).
-  Perception latency 10x higher than classical (0.156 vs 0.016 ms) but still <1ms,
-  well within the ~16ms frame budget at 60fps.
-  Remaining failures are dominated by timing errors at high speed (speed > 35),
-  where even correct perception leaves insufficient reaction distance.
+  Model: 3-conv-block CNN (with BatchNorm, Dropout 0.3), 32x32 grayscale crops,
+  trained on 80 episodes (seeds 200-279, disjoint from eval seeds). Classical
+  agent used to drive data collection; obstacles_raw ground truth used for labels.
+  Training: 30 epochs, Adam lr=1e-3, cosine LR schedule, weight decay, class
+  oversampling, horizontal flip + brightness augmentation, best-checkpoint saving.
+  Val accuracy: 100% on the 3-class decoy/ground/flying problem — the light-blue
+  cloud color gives a huge signal that makes classification near-trivial.
+
+  The approach is a two-stage cascade:
+    1. classical contour detection finds candidate bboxes
+    2. the CNN classifies each 32x32 patch
+  Misclassification is nearly solved (4%) but the cascade inherits classical's
+  detection limits: 39% of failures are missed_detection, where contour detection
+  dropped a real obstacle at high speed and the CNN never got to see it. This is
+  the structural tradeoff: cleaner decoy handling, but bounded by contour recall.

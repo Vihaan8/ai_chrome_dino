@@ -1,37 +1,36 @@
 impl=classical  episodes=100  seeds rotated through [1..5] x 20 cohorts
-game variant=decoys enabled (cloud decoys spawn at cactus-like Y with no collision)
+game variant=light-blue fluffy cloud decoys at random Y in [85, 135], no collision
+perception threshold=220 (catches the light-blue cloud; background stays at 247 and is filtered out)
 
-score:              mean=1783.8  median=1156  max=8637  min=281  stdev=1882.1
-obstacles cleared:  mean=17.0    median=10    max=88    min=1    stdev=19.9
-final game speed:   min=7.12   max=40.54   (range compressed by early deaths)
+score:              mean=2510.9  median=1302  max=9426  min=301  stdev=2501.0
+obstacles cleared:  mean=24.4    median=11    max=98    min=1    stdev=25.8
+final game speed:   min=7.20     max=43.70
 
 survival thresholds:
-  % reaching  1000:  54.0%
-  % reaching  5000:   8.0%
+  % reaching  1000:  59.0%
+  % reaching  5000:  16.0%
   % reaching 10000:   0.0%  (max_frames cap)
 
 score percentiles:
-  p10=348  p25=548  p50=1156  p75=2309  p90=4761  p95=6621
+  p10=386  p25=745  p50=1302  p75=3607  p90=7616  p95=8346
 
 death cause:
-  ground (cactus):        67  ( 67.0%)
-  flying (pterodactyl):   33  ( 33.0%)
+  ground (cactus):        73  ( 73.0%)
+  flying (pterodactyl):   27  ( 27.0%)
 
 failure analysis (eval/failure_analysis.py):
   survived           0  (  0.0%)
   missed_detection   0  (  0.0%)
-  misclassification 47  ( 47.0%)  clouds tagged as cacti by contour-plus-position rules
+  misclassification 57  ( 57.0%)  clouds tagged as real obstacles by fixed-threshold contour rules
   late_reaction      0  (  0.0%)
-  timing_error      53  ( 53.0%)  jumped or ducked but hit anyway
+  timing_error      43  ( 43.0%)  acted on a real obstacle but collided anyway
 
 per-frame latency:
   perception:  0.016 ms/frame
   planning:    0.000 ms/frame
 
-comparison vs the pre-decoy baseline (identical seeds, no clouds):
-  mean score:           8241.5 -> 1783.8    (drop of 6458)
-  median score:         8354   -> 1156      (drop of 7198)
-  stdev:                454.6  -> 1882.1    (4.1x more erratic)
-  percent reaching 5k:  100.0% -> 8.0%
-  percent flying deaths: 0.0%  -> 33.0%
-  percent misclass:      0.0%  -> 47.0%
+note: random cloud Y values produce a higher classical mean than fixed Y=131 clouds,
+because clouds at high Y (above the standing dino) cause classical to duck, which is
+cheap (one-frame entry and exit). Clouds at ground Y still cause the expensive 35-frame
+jump. Average over the Y distribution is therefore better than the fixed-at-ground
+variant. Median is similar, variance larger.

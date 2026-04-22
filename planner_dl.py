@@ -1,12 +1,12 @@
 """
-DL planner. Owner: Anvita Suresh.
+DL planner.
 
 Must match the contract in DL_INTERFACE.md:
     decide(obstacle_info, game_speed, cfg) -> 'none' | 'jump' | 'duck'
 
-If the DL contribution is on perception only, this file can import from
-planner.py and simply re-export `decide`. If the planner itself is
-learned, implement it here.
+If the DL contribution is on perception only, this file imports from
+planner.py and re-exports `decide`. If the planner itself is learned,
+implement it here.
 
 Default: delegate to the classical planner. Swap when needed.
 """

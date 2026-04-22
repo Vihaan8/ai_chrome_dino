@@ -1,5 +1,5 @@
 """
-DL perception. Owner: Anvita Suresh.
+DL perception.
 
 Pipeline: classical contour detection finds candidate bounding boxes,
 then a small CNN classifies each crop as ground / flying / decoy.

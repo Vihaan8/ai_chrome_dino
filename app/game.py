@@ -27,12 +27,16 @@ PTERO_H = 20
 PTERO_HIGH_Y = 108
 PTERO_LOW_Y = 135
 
-# Decoys: visually obstacle-like clouds that drift through the play area.
-# They do not collide, but contour-based perception picks them up as obstacles,
-# wasting jumps and occasionally leaving the dino airborne when a real cactus arrives.
-CLOUD_W = 48
-CLOUD_H = 20
-CLOUD_Y = 135          # bottom at 155 so classical classifies it as ground
+# Decoys: light-blue cloud-shaped shapes that drift through the play area.
+# They do not collide but perception still detects them (config.yaml threshold
+# was raised to 220 so the light color still falls under the dark-pixel filter).
+# The shape and color are intentionally obstacle-unlike; distinguishing them
+# from real cacti is the job DL perception is meant to do better than classical.
+CLOUD_W = 56           # 14 grid cells at 4x scale
+CLOUD_H = 24           # 6 grid rows at 4x scale
+CLOUD_Y_MIN = 85       # top Y range; cloud bottom ranges from 109 to 159
+CLOUD_Y_MAX = 135
+CLOUD_COLOR = (170, 200, 230)  # light sky blue
 SPAWN_CLOUD_MIN = 160
 SPAWN_CLOUD_MAX = 340
 
@@ -105,11 +109,12 @@ PTERO_UP = """
 """.strip('\n')
 
 CLOUD = """
-...######...
-.##########.
-############
-.##########.
-...######...
+....####......
+..#########...
+.############.
+##############
+.############.
+..#########...
 """.strip('\n')
 
 PTERO_DOWN = """
@@ -155,7 +160,7 @@ class Game:
         self.spr_dino_duck = [_sprite(DINO_DUCK_A), _sprite(DINO_DUCK_B)]
         self.spr_cactus = _sprite(CACTUS)
         self.spr_ptero = [_sprite(PTERO_UP), _sprite(PTERO_DOWN)]
-        self.spr_cloud = _sprite(CLOUD)
+        self.spr_cloud = _sprite(CLOUD, color=CLOUD_COLOR)
 
     def reset(self, seed=None):
         self.rng = random.Random(seed)
@@ -257,7 +262,8 @@ class Game:
                                    PTERO_W, PTERO_H, 'flying'])
 
     def _spawn_cloud(self):
-        self.obstacles.append([float(SCREEN_W), float(CLOUD_Y),
+        y = self.rng.randint(CLOUD_Y_MIN, CLOUD_Y_MAX)
+        self.obstacles.append([float(SCREEN_W), float(y),
                                CLOUD_W, CLOUD_H, 'decoy'])
 
     def _hit(self, a, b):
